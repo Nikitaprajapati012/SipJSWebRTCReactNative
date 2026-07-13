@@ -1,164 +1,106 @@
-# Client application - Ventrilo
+# Ventrilo - SIP.js & WebRTC Audio + Video Calling Client
 
-Ventrilo is a production-quality React Native audio calling application utilizing **SIP.js** for signaling and **WebRTC** for real-time media exchange. It connects to a customized Node.js Socket.IO mock SIP server, simulating standard VoIP operations without requiring a real PBX/SIP server backend.
-
----
-
-## 🏗️ Architectural Overview
-
-The application is built on a decoupled architecture separating **Signaling** (negotiation and session control) and **Media** (raw RTP audio data streams).
-
-```
- ┌────────────────────────────────────────────────────────┐
- │                      CLIENT APP                        │
- │                                                        │
- │   ┌─────────────────┐             ┌────────────────┐   │
- │   │     SIP.js      │             │    WebRTC      │   │
- │   │   (Signaling)   │             │    (Media)     │   │
- │   └────────┬────────┘             └───────┬────────┘   │
- └────────────┼──────────────────────────────┼────────────┘
-              │                              │
-              │ SIP Packets                  │ RTP Audio Stream
-              │ (Socket.IO tunnel)           │ (Peer-to-Peer)
-              ▼                              ▼
- ┌───────────────────────────┐ ┌───────────────────────────┐
- │       MOCK SERVER         │ │        PEER DEVICE        │
- │    (Express / Socket)     │ │        (Remote Mic)       │
- └───────────────────────────┘ └───────────────────────────┘
-```
-
-### Key Differences: Signaling vs. Media
-1. **Signaling (SIP.js / Socket.IO)**: 
-   - **Protocol**: Session Initiation Protocol (SIP).
-   - **Role**: Coordinates the call. Finds the remote peer, dials their number, handles ringing alerts, agrees to accept or decline the call, and exchanges connection criteria (SDP / ICE).
-   - **Path**: Client 1 ➜ Mock Server ➜ Client 2.
-2. **Media (react-native-webrtc)**:
-   - **Protocol**: Real-time Transport Protocol (RTP) / Secure RTP (SRTP).
-   - **Role**: Encodes, transmits, and decodes raw audio packets.
-   - **Path**: Peer-to-Peer directly between Device 1 and Device 2. Once the call is connected, media does NOT transit through our signaling server.
+Ventrilo is a production-quality React Native audio and video calling application utilizing **SIP.js** for signaling, **WebRTC** (`react-native-webrtc`) for real-time media exchange, and native modules for Picture-in-Picture (PiP) support. It connects to a customized Node.js signaling proxy server.
 
 ---
 
-## 🗂️ Folder Structure
+## 🏗️ Video Calling & PiP Architecture
 
+The application implements a real-time peer-to-peer (P2P) communication bridge for both audio and video streams. 
+
+### Architecture Flow Diagram
 ```
-Client/
-├── App.js               # Entry router and state providers (Auth, Socket, Call)
-├── index.js             # Native app registry and WebRTC global polyfills
-├── package.json         # Client dependencies and run scripts
-├── .env.example         # Template for environment variables
-└── src/
-    ├── config.js        # Host URLs & STUN configuration
-    ├── context/
-    │   ├── AuthContext.js    # Manages user authentication and tokens
-    │   ├── SocketContext.js  # Manages WebSocket connection to proxy
-    │   └── CallContext.js    # Core call state machine (ticking timers, streams)
-    ├── hooks/
-    │   ├── useAuth.js   # Context shortcut for user sessions
-    │   ├── useSocket.js # Context shortcut for socket connections
-    │   ├── useCall.js   # Context shortcut for active calls
-    │   └── useUsers.js  # Manages initial list fetch & live status syncing
-    ├── screens/
-    │   ├── LoginScreen.js  # Sleek credential inputs & autofill panel
-    │   ├── HomeScreen.js   # Presence list of contacts & dialing trigger
-    │   ├── CallScreen.js   # Dynamic layout (Incoming Ringing, Outgoing, Active)
-    │   └── DebugScreen.js  # Terminal window monitoring real-time logs
-    └── services/
-        ├── Logger.js         # Centralized log manager with subscription buffers
-        ├── StorageService.js # Wrapper around AsyncStorage
-        ├── AuthService.js    # Handles HTTP Login REST calls
-        ├── SocketService.js  # Handles socket connection events
-        ├── WebRTCService.js  # Wraps manual RTCPeerConnection creation
-        ├── SipService.js     # Hooks Socket.IO transport into SIP.js core
-        ├── CallService.js    # Orchestrates SipService & WebRTCService together
-        └── UserService.js    # Fetches contacts & listens for socket presence updates
+Login
+  ↓
+SIP Registration
+  ↓
+Place Call (Audio/Video select)
+  ↓
+SIP INVITE (SDP contains m=audio & m=video)
+  ↓
+Offer/Answer Negotiation
+  ↓
+ICE Candidates Gathering (Vanilla ICE)
+  ↓
+P2P Media Track Connection established
+  ↓
+Video Rendering via <RTCView />
+  ↓
+Minimize (System / In-App Overlay PiP)
+  ↓
+End Call (SIP BYE -> teardown streams)
 ```
 
 ---
 
-## ⚡ SIP.js & WebRTC Protocols Explained
+## ⚡ WebRTC Media & Video Track Flow
 
-### 1. How SIP.js Works
-SIP.js is a SIP signaling library. It maintains the SIP transaction and session state machine.
-- **REGISTER**: When Alice logs in, SIP.js sends a `REGISTER` message to our proxy to tell the network she is reachable at `sip:alice@mock.sip.server`.
-- **INVITE**: To place a call, Alice's SIP.js creates an `INVITE` request containing an Session Description Protocol (SDP) body.
-- **100 Trying / 180 Ringing**: The server returns `100 Trying` (routing in progress) and `180 Ringing` (receiver device alert) to Alice's client.
-- **200 OK**: When Bob clicks Accept, his SIP.js returns a `200 OK` response containing his SDP answer.
-- **BYE**: When either party hangs up, a `BYE` message is sent, telling the other client to tear down the audio channel.
+1. **UserMedia Acquisition**:
+   - Audio tracks are gathered via microphone permissions.
+   - Video tracks are gathered using camera permissions (defaulting to the front-facing camera).
+   - If camera is disabled during a call, only the video track's enabled status is toggled (`track.enabled = false`), allowing the audio channel to continue working seamlessly.
 
-### 2. How WebRTC Works
-WebRTC (Web Real-Time Communication) provides the capabilities to capture and stream microphone data directly between devices.
-- **RTCPeerConnection**: Represents the connection between the local computer and a remote peer.
-- **Offer/Answer Flow (SDP)**:
-  - **Session Description Protocol (SDP)** is a text description of a device's media capabilities (audio codecs supported, network addresses, ports).
-  - The Caller generates an **Offer SDP** and sends it via SIP signaling to the Callee.
-  - The Callee receives the Offer, configures their device, generates an **Answer SDP**, and sends it back to the Caller.
-- **ICE Gathering Flow (Interactive Connectivity Establishment)**:
-  - To bypass firewalls and routers, WebRTC uses STUN servers (`stun.l.google.com:19302`) to identify a client's public IP address (IP candidates).
-  - In our implementation, we use **Vanilla ICE**: we pause the SDP generation until our client compiles all local network candidates (`iceGatheringState === 'complete'`). This embeds all paths directly into the SDP, making connection extremely robust without complex candidate trickle handlers.
+2. **Vanilla ICE Negotiation**:
+   - Local SDP offers and answers are compiled.
+   - The ICE gathering state is monitored until it reaches `complete`.
+   - All network candidates are embedded directly into the SDP payload before sending, avoiding trickle candidate signaling overhead and reducing connection setup times.
+
+3. **Track Event Binding**:
+   - `ontrack` triggers on the peer connection when the remote participant's media streams are negotiated.
+   - The remote stream is retrieved and assigned to the `<RTCView />` component via `streamURL={remoteStream.toURL()}`.
 
 ---
 
-## 📝 Centralized Logger & Mock SIP Server
+## 📱 Picture-in-Picture (PiP) Architecture
 
-### 1. Logger.js
-Every lifecycle event is logged using a unified structure:
-```
-[Timestamp] [Username] [Screen] [Module] [Method] [Action] [Result]
-```
-For example, when Alice calls Bob:
-```
-----------------------------------------------------
-[14:10:15]
-User   : Alice
-Screen : Home
-Module : CallService
-Method : makeCall()
-Action : Call Initiated
-Result : Calling Bob
-----------------------------------------------------
-```
-These logs are simultaneously output to `console.log()` and appended to a central ring-buffer, which the **DebugScreen** subscribes to for real-time visualization.
+The application supports both system-level PiP (Android) and in-app overlay PiP (iOS & Android).
 
-### 2. Mock SIP Server
-The Server acts as a SIP registrar and SIP proxy.
-- **Registrar**: Resolves user locations by mapping SIP URIs (`sip:alice@mock.sip.server`) to Socket IDs.
-- **Proxy**: Parses raw text SIP messages coming from a client socket, reads their `To` and `From` headers, and routes them to the recipient's socket, updating and broadcasting presence states (ONLINE, OFFLINE, IN CALL) reactively.
+### Android System PiP
+- **Declaration**: Configured in `AndroidManifest.xml` with `android:supportsPictureInPicture="true"`.
+- **Trigger**: Handled natively when the user presses the home button (`onUserLeaveHint()`) or clicks the PiP control button in the UI (`PipModule.enterPip()`).
+- **Lifecycle Integration**: The Activity's state transitions are captured via `onPictureInPictureModeChanged()` and broadcasted to React Native via standard React Device Event Emitters (`onPipModeChanged`), updating the JS states to hide control buttons and render only the remote participant's video fullscreen.
+
+### iOS PiP (In-App Overlay)
+- **Concept**: Due to Apple's system restrictions limiting native system-level PiP to `AVPlayerLayer` elements (unless implementing heavy buffer sample rendering layers), iOS handles PiP through an **In-App Draggable Floating Overlay**.
+- **Implementation**: Toggling minimize navigates the user back to the dashboard/debug screens while rendering a draggable `<FloatingCallOverlay />` that displays the remote feed and simple end-call/restore controls.
 
 ---
 
-## ⚙️ Installation & Running
+## ⚙️ Folders & Modules Added
 
-### Prerequisites
-- Node.js (>= 18)
-- React Native CLI environment setup (Android SDK / Xcode)
+- `Client/android/app/src/main/java/com/sipwebrtcapp/PipModule.kt`: Native Android Kotlin bridge exposing PiP triggers and active call indicators.
+- `Client/src/components/FloatingCallOverlay.js`: Draggable PanResponder-based overlay component for in-app call minimization.
 
-### 1. Install Dependencies
-Ensure you run this inside the `Client/` directory:
-```bash
-npm install
-```
+---
 
-### 2. Configure Environment
-Copy `.env.example` to `.env` and adjust the variables to point to your development server's IP address (use `10.0.2.2` for Android emulator):
-```env
-API_URL=http://localhost:3000/api
-SOCKET_URL=http://localhost:3000
-```
+## 📝 Troubleshooting & FAQ
 
-### 3. Run the Metro Bundler
-Start the Metro bundler to compile Javascript assets:
-```bash
-npm run start
-```
+### Q: Why is there a "Network Error" when logging in on a physical device?
+A: Android physical devices do not automatically share the host's localhost port. Always run `adb reverse tcp:3000 tcp:3000` to bind your computer's mock signaling server port to the physical device. (This is now automated in the client's `npm start` and `npm run android` scripts).
 
-### 4. Build and Launch App
-Open a separate terminal window and launch the build process for your target emulator or device:
-- **Android**:
-  ```bash
-  npm run android
-  ```
-- **iOS**:
-  ```bash
-  npm run ios
-  ```
+### Q: Camera fails to start, displaying a black frame. What is wrong?
+A: Ensure that you have granted Camera and Microphone permissions to the application. Check that your device camera is not occupied by another app.
+
+### Q: Does audio continue playing when the app goes into the background?
+A: Yes. The background audio permission is declared, and the native `AudioManager` uses `MODE_IN_COMMUNICATION` to maintain the session active.
+
+---
+
+## 🛠️ Verification & Build Commands
+
+1. **Verify Code Formatting**:
+   ```bash
+   npm run lint
+   ```
+2. **Execute Tests**:
+   ```bash
+   npm test
+   ```
+3. **Start Development metro server**:
+   ```bash
+   npm start
+   ```
+4. **Compile and Run on Android**:
+   ```bash
+   npm run android
+   ```

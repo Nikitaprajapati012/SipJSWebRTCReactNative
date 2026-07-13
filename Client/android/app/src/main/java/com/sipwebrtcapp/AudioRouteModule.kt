@@ -42,4 +42,14 @@ class AudioRouteModule(reactContext: ReactApplicationContext) : ReactContextBase
             Log.e("AudioRouteModule", "Failed to play hold beep: ${e.message}")
         }
     }
+    @ReactMethod
+    fun clearAudioRoute() {
+        try {
+            audioManager.mode = AudioManager.MODE_NORMAL
+            audioManager.isSpeakerphoneOn = false
+            Log.d("AudioRouteModule", "Audio route cleared")
+        } catch (e: Exception) {
+            Log.e("AudioRouteModule", "Failed to clear audio route: ${e.message}")
+        }
+    }
 }

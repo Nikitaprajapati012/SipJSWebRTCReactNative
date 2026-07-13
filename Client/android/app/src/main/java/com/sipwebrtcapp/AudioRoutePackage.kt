@@ -10,6 +10,7 @@ class AudioRoutePackage : ReactPackage {
     override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
         val modules = ArrayList<NativeModule>()
         modules.add(AudioRouteModule(reactContext))
+        modules.add(PipModule(reactContext))
         return modules
     }
 

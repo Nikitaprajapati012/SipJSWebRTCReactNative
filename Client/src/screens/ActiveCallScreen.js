@@ -1,25 +1,22 @@
 /**
- * Client/src/screens/CallScreen.js
+ * Client/src/screens/ActiveCallScreen.js
  * 
- * Dynamic Call Control Screen.
- * Renders distinct layouts for Incoming Call, Outgoing Dialing, and Active Calls.
- * Connects directly to CallContext state and action flows.
+ * Immersive Active Call interface (Audio and Video layout).
  */
 
-import React, { useEffect } from 'react';
-import {
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-  StatusBar,
-} from 'react-native';
+import React from 'react';
+import { StyleSheet, View, StatusBar, SafeAreaView, TouchableOpacity, Text } from 'react-native';
 import { useCall } from '../hooks/useCall';
 import Icon from 'react-native-vector-icons/Ionicons';
-import CallService from '../services/CallService';
 
-export default function CallScreen({ navigation }) {
+// Reusable Components
+import CallHeader from '../components/CallHeader';
+import CallControls from '../components/CallControls';
+import LocalPreview from '../components/LocalPreview';
+import VideoRenderer from '../components/VideoRenderer';
+import LoadingOverlay from '../components/LoadingOverlay';
+
+export default function ActiveCallScreen() {
   const {
     callState,
     callerName,
@@ -28,85 +25,46 @@ export default function CallScreen({ navigation }) {
     isHold,
     isPeerOnHold,
     callDuration,
-    acceptCall,
-    rejectCall,
     hangup,
     toggleMute,
     toggleSpeaker,
     toggleHold,
     formatTimer,
-    incomingInvitation,
+    // Video elements
+    isVideoCall,
+    isCameraEnabled,
+    isFrontCamera,
+    isSystemPipActive,
+    toggleCamera,
+    switchCamera,
+    remoteStream,
+    remoteStreamKey,
+    localStream,
+    webrtcConnectionState,
   } = useCall();
-
-  // Return to Home once the call terminates and state goes back to Idle
-  useEffect(() => {
-    if (callState === 'Idle') {
-      navigation.navigate('Home');
-    }
-  }, [callState, navigation]);
 
   const getInitials = (name) => {
     if (!name) return '?';
     return name.slice(0, 2).toUpperCase();
   };
 
-  // Determine direction: we have an incoming call if we are ringing and callerName is set,
-  // but we must check if callState is Ringing and we are receiving.
-  // The CallContext sets callerName for both, but incoming invitation exists on incoming.
-  // In CallScreen, we can render the appropriate sub-layout.
-  
-  const isIncoming = callState === 'Ringing' && acceptCall && !CallStateIsOutgoing(callState);
-
-  // Helper to distinguish outgoing ringing vs incoming ringing
-  function CallStateIsOutgoing(state) {
-    // If we initiated the call, we start at Dialing -> Trying -> Ringing.
-    // In CallContext, the incomingInvitation is stored for incoming.
-    // Let's determine this cleanly.
+  // Android Picture-in-Picture layout
+  if (isSystemPipActive) {
+    return (
+      <View style={styles.pipContainer}>
+        <VideoRenderer
+          stream={remoteStream}
+          streamKey={remoteStreamKey}
+          placeholderName={callerName}
+          placeholderText="Connecting..."
+          zOrder={0}
+        />
+      </View>
+    );
   }
 
-  // Let's implement the layouts
-  const renderIncomingCall = () => (
-    <View style={styles.content}>
-      <View style={styles.avatarSection}>
-        <View style={styles.largeAvatar}>
-          <Text style={styles.largeAvatarText}>{getInitials(callerName)}</Text>
-        </View>
-        <Text style={styles.callerNameText}>{callerName}</Text>
-        <Text style={styles.callStateSubtext}>Incoming Audio Call...</Text>
-      </View>
-
-      <View style={styles.incomingActionRow}>
-        <TouchableOpacity style={[styles.actionButton, styles.acceptBtn]} onPress={acceptCall}>
-          <Icon name="call" size={32} color="#FFFFFF" />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={[styles.actionButton, styles.declineBtn]} onPress={rejectCall}>
-          <Icon name="call" size={32} color="#FFFFFF" style={{ transform: [{ rotate: '135deg' }] }} />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-
-  const renderOutgoingCall = () => (
-    <View style={styles.content}>
-      <View style={styles.avatarSection}>
-        <View style={styles.largeAvatar}>
-          <Text style={styles.largeAvatarText}>{getInitials(callerName)}</Text>
-        </View>
-        <Text style={styles.callerNameText}>{callerName}</Text>
-        <Text style={styles.callStateSubtext}>{callState}...</Text>
-      </View>
-
-      <View style={styles.actionRowSingle}>
-        <TouchableOpacity style={[styles.actionButton, styles.declineBtn]} onPress={hangup}>
-          <Icon name="call" size={32} color="#FFFFFF" style={{ transform: [{ rotate: '135deg' }] }} />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-
-  const renderActiveCall = () => {
-    // Resolve display call state text
+  // Active Audio Call layout
+  const renderAudioCall = () => {
     let stateLabel = callState;
     if (callState === 'Connected') {
       if (isPeerOnHold) stateLabel = 'Placed you on Hold';
@@ -128,7 +86,6 @@ export default function CallScreen({ navigation }) {
           </Text>
         </View>
 
-        {/* Call Features Controls Panel */}
         <View style={styles.controlsPanel}>
           <View style={styles.controlsGrid}>
             <TouchableOpacity
@@ -152,7 +109,7 @@ export default function CallScreen({ navigation }) {
               onPress={toggleHold}
             >
               <Icon name={isHold ? 'play' : 'pause'} size={24} color={isHold ? '#38BDF8' : '#94A3B8'} style={{ marginBottom: 6 }} />
-              <Text style={styles.controlGridLabel}>{isHold ? 'On Hold' : 'Hold'}</Text>
+              <Text style={styles.controlGridLabel}>{isHold ? 'Resume' : 'Hold'}</Text>
             </TouchableOpacity>
           </View>
 
@@ -166,37 +123,74 @@ export default function CallScreen({ navigation }) {
     );
   };
 
-  // Determine call layout mode
-  const renderLayout = () => {
-    if (callState === 'Ringing' && acceptCall && callerName) {
-      // If we have an active invitation stored, show incoming layout
-      // Let's verify by checking if CallService has a session that is an Invitation
-      const session = CallService.activeSession;
-      const isIncomingCall = session && session.constructor.name === 'Invitation';
+  if (!isVideoCall) {
+    return (
+      <View style={styles.container}>
+        <StatusBar barStyle="light-content" backgroundColor="#0F172A" />
+        <SafeAreaView style={styles.safeAreaContainer}>
+          {renderAudioCall()}
+        </SafeAreaView>
+      </View>
+    );
+  }
 
-      // Alternatively, we set state in CallContext:
-      // If invitation is cached, it's incoming
-      if (callState === 'Ringing' && acceptCall && session && session.constructor.name === 'Invitation') {
-        return renderIncomingCall();
-      }
-    }
-
-    if (callState === 'Ringing' && incomingInvitation) {
-      return renderIncomingCall();
-    }
-
-    if (callState === 'Dialing' || callState === 'Trying' || (callState === 'Ringing' && !incomingInvitation)) {
-      return renderOutgoingCall();
-    }
-
-    return renderActiveCall();
-  };
-
+  // Active Video Call UI Layout
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0F172A" />
-      {renderLayout()}
-    </SafeAreaView>
+
+      {/* Fullscreen Video Canvas */}
+      <View style={styles.videoCanvas}>
+        <VideoRenderer
+          stream={remoteStream}
+          streamKey={remoteStreamKey}
+          placeholderName={callerName}
+          placeholderText="Waiting for Video..."
+          zOrder={0}
+        />
+      </View>
+
+      {/* Floating Draggable Local Preview */}
+      <LocalPreview
+        stream={localStream}
+        isEnabled={isCameraEnabled}
+        isFront={isFrontCamera}
+      />
+
+      {/* Floating Top Overlay Header */}
+      <CallHeader
+        participantName={callerName}
+        isVideoCall={true}
+        callDuration={callDuration}
+        callState={callState}
+        isPeerOnHold={isPeerOnHold}
+        webrtcConnectionState={webrtcConnectionState}
+      />
+
+      {/* Loading overlay for initial negotiation steps */}
+      {!remoteStream && (
+        <LoadingOverlay message="Connecting video feed..." />
+      )}
+
+      {/* Absolute Bottom controls container */}
+      <View style={styles.absoluteControlsContainer} pointerEvents="box-none">
+        <CallControls
+          callState={callState}
+          isIncomingCall={false}
+          isVideoCall={true}
+          isMuted={isMuted}
+          isSpeakerOn={isSpeakerOn}
+          isCameraEnabled={isCameraEnabled}
+          isHold={isHold}
+          toggleMute={toggleMute}
+          toggleSpeaker={toggleSpeaker}
+          toggleCamera={toggleCamera}
+          switchCamera={switchCamera}
+          toggleHold={toggleHold}
+          hangup={hangup}
+        />
+      </View>
+    </View>
   );
 }
 
@@ -204,6 +198,30 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0F172A',
+  },
+  safeAreaContainer: {
+    flex: 1,
+    justifyContent: 'space-between',
+    backgroundColor: 'transparent',
+  },
+  pipContainer: {
+    flex: 1,
+    backgroundColor: '#0F172A',
+  },
+  videoCanvas: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#0F172A',
+    zIndex: -1,
+  },
+  absoluteControlsContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 20,
+    paddingBottom: 35,
+    zIndex: 10,
+    elevation: 20,
   },
   content: {
     flex: 1,
@@ -215,6 +233,7 @@ const styles = StyleSheet.create({
   avatarSection: {
     alignItems: 'center',
     marginTop: 40,
+    zIndex: 10,
   },
   largeAvatar: {
     width: 140,
@@ -269,22 +288,16 @@ const styles = StyleSheet.create({
   },
   callStateSubtextHold: {
     fontSize: 14,
-    color: '#F59E0B', // Amber 500
+    color: '#F59E0B',
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 1.5,
-    backgroundColor: '#78350F', // Dark Amber
+    backgroundColor: '#78350F',
     paddingHorizontal: 16,
     paddingVertical: 6,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#F59E0B',
-  },
-  incomingActionRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
-    paddingHorizontal: 20,
   },
   actionRowSingle: {
     justifyContent: 'center',
@@ -294,8 +307,8 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     width: 85,
-    height: 64, // Reduced height
-    borderRadius: 16, // Rounded square shape
+    height: 64,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
     shadowOffset: { width: 0, height: 4 },
@@ -303,28 +316,14 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 4,
   },
-  acceptBtn: {
-    backgroundColor: '#10B981', // Emerald 500
-    shadowColor: '#10B981',
-  },
   declineBtn: {
-    backgroundColor: '#EF4444', // Rose 500
+    backgroundColor: '#EF4444',
     shadowColor: '#EF4444',
-  },
-  actionBtnIcon: {
-    fontSize: 32,
-    color: '#FFFFFF',
-    marginBottom: 4,
-  },
-  actionBtnLabel: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 2,
   },
   controlsPanel: {
     width: '100%',
     alignItems: 'center',
+    zIndex: 20,
   },
   controlsGrid: {
     flexDirection: 'row',
@@ -348,10 +347,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#334155',
     borderColor: '#38BDF8',
     borderWidth: 1,
-  },
-  controlGridIcon: {
-    fontSize: 24,
-    marginBottom: 6,
   },
   controlGridLabel: {
     fontSize: 12,

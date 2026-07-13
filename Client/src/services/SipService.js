@@ -89,13 +89,14 @@ class CustomSessionDescriptionHandler {
     this.session = session;
     this.options = options;
     this.peerConnection = null;
-    this.localStream = null;
+    this.localStream = sipServiceInstance?.localStream || null;
     this.remoteStream = null;
     
     // Store callbacks defined by CallService / SipService
     const handlerOptions = options?.sessionDescriptionHandlerOptions || options;
     this.onTrackCallback = handlerOptions?.onTrackCallback || sipServiceInstance?.onTrackCallback;
     this.onPeerConnectionCreated = handlerOptions?.onPeerConnectionCreated || sipServiceInstance?.onPeerConnectionCreated;
+    this.constraints = handlerOptions?.constraints || sipServiceInstance?.constraints;
 
     // Cache remote SDP if it arrives before our peer connection is instantiated
     this.remoteSdp = null;
@@ -126,9 +127,10 @@ class CustomSessionDescriptionHandler {
     });
 
     try {
-      // Acquire local audio stream if not done
+      // Acquire local stream (audio and/or video) based on constraints passed in options
+      const constraints = options?.constraints || this.options?.constraints || this.options?.sessionDescriptionHandlerOptions?.constraints || this.constraints || sipServiceInstance?.constraints || { audio: true, video: false };
       if (!this.localStream) {
-        this.localStream = await WebRTCService.getLocalStream();
+        this.localStream = sipServiceInstance?.localStream || await WebRTCService.getLocalStream(constraints);
       }
 
       // Initialize peer connection if not done

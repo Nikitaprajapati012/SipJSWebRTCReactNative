@@ -27,16 +27,11 @@ import Icon from 'react-native-vector-icons/Ionicons';
 export default function HomeScreen({ navigation }) {
   const { user, logout } = useAuth();
   const { isSocketConnected } = useSocket();
-  const { makeCall, callState } = useCall();
-  const { users, isLoading, error } = useUsers();
+  const { makeCall } = useCall();
+  const { users, isLoading, error, refetch } = useUsers();
   const [search, setSearch] = useState('');
 
-  // Automatically steer to Call Screen if signaling starts
-  React.useEffect(() => {
-    if (callState !== 'Idle') {
-      navigation.navigate('Call');
-    }
-  }, [callState, navigation]);
+
 
   // Compute initials for profile avatars
   const getInitials = (name) => {
@@ -66,9 +61,9 @@ export default function HomeScreen({ navigation }) {
     );
   }, [users, search]);
 
-  const handleCallUser = async (targetUsername) => {
+  const handleCallUser = async (targetUsername, isVideo = false) => {
     try {
-      await makeCall(targetUsername);
+      await makeCall(targetUsername, isVideo);
     } catch (e) {
       console.log('Outgoing call execution error: ', e);
     }
@@ -98,13 +93,22 @@ export default function HomeScreen({ navigation }) {
         </View>
 
         {!isMe && (
-          <TouchableOpacity
-            style={[styles.callButton, !canCall && styles.callButtonDisabled]}
-            disabled={!canCall}
-            onPress={() => handleCallUser(item.username)}
-          >
-            <Icon name="call" size={20} color="#FFFFFF" />
-          </TouchableOpacity>
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity
+              style={[styles.callButton, !canCall && styles.callButtonDisabled]}
+              disabled={!canCall}
+              onPress={() => handleCallUser(item.username, false)}
+            >
+              <Icon name="call" size={18} color="#FFFFFF" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.videoCallButton, !canCall && styles.callButtonDisabled]}
+              disabled={!canCall}
+              onPress={() => handleCallUser(item.username, true)}
+            >
+              <Icon name="videocam" size={18} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
         )}
       </View>
     );
@@ -367,6 +371,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#334155',
     shadowOpacity: 0,
     elevation: 0,
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  videoCallButton: {
+    backgroundColor: '#8B5CF6', // Violet 500
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 2,
   },
   phoneIconContainer: {
     justifyContent: 'center',

@@ -6,16 +6,18 @@
  * Starts SipService once signaling socket is ready.
  */
 
-import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
-import { NativeModules } from 'react-native';
+import React, { createContext, useState, useEffect, useContext, useRef, useCallback } from 'react';
+import { NativeModules, DeviceEventEmitter } from 'react-native';
 import { AuthContext } from './AuthContext';
 import { SocketContext } from './SocketContext';
 import SipService, { SessionState } from '../services/SipService';
 import CallService from '../services/CallService';
+import WebRTCService from '../services/WebRTCService';
 import Logger from '../services/Logger';
 import SocketService from '../services/SocketService';
+import * as NavigationService from '../services/NavigationService';
 
-const { AudioRouteModule } = NativeModules;
+const { AudioRouteModule, PipModule } = NativeModules;
 
 export const CallContext = createContext();
 
@@ -24,7 +26,12 @@ export const CallProvider = ({ children }) => {
   const { isSocketConnected } = useContext(SocketContext);
 
   const [callState, setCallState] = useState('Idle'); // Idle, Dialing, Ringing, Connecting, Connected, Ended, Failed
-  const [incomingInvitation, setIncomingInvitation] = useState(null);
+  const [incomingInvitation, _setIncomingInvitation] = useState(null);
+  const incomingInvitationRef = useRef(null);
+  const setIncomingInvitation = (val) => {
+    incomingInvitationRef.current = val;
+    _setIncomingInvitation(val);
+  };
   const [remoteStream, setRemoteStream] = useState(null);
   const [localStream, setLocalStream] = useState(null);
   const [isMuted, setIsMuted] = useState(false);
@@ -33,7 +40,46 @@ export const CallProvider = ({ children }) => {
   const [isPeerOnHold, setIsPeerOnHold] = useState(false); // Track if remote peer placed us on hold
   const [callDuration, setCallDuration] = useState(0);
 
+  // New Video Calling and PiP states
+  const [isVideoCall, setIsVideoCall] = useState(false);
+  const [isCameraEnabled, setIsCameraEnabled] = useState(true);
+  const [isFrontCamera, setIsFrontCamera] = useState(true);
+  const [isSystemPipActive, setIsSystemPipActive] = useState(false);
+  const [isInAppPipActive, setIsInAppPipActive] = useState(false);
+  const [remoteStreamKey, setRemoteStreamKey] = useState('');
+  const [webrtcConnectionState, setWebrtcConnectionState] = useState('Checking');
+
   const timerRef = useRef(null);
+
+  const cleanupCallState = useCallback(() => {
+    setCallState('Idle');
+    setIncomingInvitation(null);
+    setRemoteStream(null);
+    setLocalStream(null);
+    setIsMuted(false);
+    setIsSpeakerOn(false);
+    setIsHold(false);
+    setIsPeerOnHold(false);
+    setCallDuration(0);
+
+    setIsVideoCall(false);
+    setIsCameraEnabled(true);
+    setIsFrontCamera(true);
+    setIsSystemPipActive(false);
+    setIsInAppPipActive(false);
+    setRemoteStreamKey('');
+    setWebrtcConnectionState('Checking');
+    SipService.localStream = null;
+
+    if (PipModule && PipModule.setIsVideoCallActive) {
+      PipModule.setIsVideoCallActive(false);
+    }
+
+    CallService.cleanup();
+    if (AudioRouteModule && AudioRouteModule.clearAudioRoute) {
+      AudioRouteModule.clearAudioRoute();
+    }
+  }, []);
 
   // Initialize and tear down SipService alongside socket connection status
   useEffect(() => {
@@ -41,7 +87,7 @@ export const CallProvider = ({ children }) => {
       SipService.start(user.username, {
         onIncomingCall: (invitation) => {
           // If we are busy, reject the call automatically
-          if (CallService.activeSession || incomingInvitation) {
+          if (CallService.activeSession || incomingInvitationRef.current) {
             Logger.log({
               username: user.username,
               module: 'CallContext',
@@ -53,13 +99,19 @@ export const CallProvider = ({ children }) => {
             return;
           }
 
+          const bodyContent = invitation.request.body
+            ? (typeof invitation.request.body === 'string' ? invitation.request.body : (invitation.request.body.content || ''))
+            : '';
+          const isVideo = /m=video/i.test(bodyContent);
+          setIsVideoCall(isVideo);
+
           Logger.log({
             username: user.username,
             screen: 'IncomingCall',
             module: 'CallContext',
             method: 'onIncomingCall',
             action: 'Incoming Invitation Cached',
-            result: `Ringing alert from ${invitation.remoteIdentity.uri.user}`
+            result: `Ringing alert from ${invitation.remoteIdentity.uri.user}. Call Type: ${isVideo ? 'Video' : 'Audio'}`
           });
 
           setIncomingInvitation(invitation);
@@ -103,7 +155,50 @@ export const CallProvider = ({ children }) => {
       SipService.stop();
       cleanupCallState();
     }
-  }, [isSocketConnected, user]);
+  }, [isSocketConnected, user, cleanupCallState]);
+
+  // Listen for Picture-in-Picture mode changes from native code (Android)
+  useEffect(() => {
+    const subscription = DeviceEventEmitter.addListener('onPipModeChanged', (event) => {
+      setIsSystemPipActive(event.isInPictureInPictureMode);
+      
+      Logger.log({
+        username: user?.username || 'System',
+        module: 'CallContext',
+        method: 'onPipModeChanged',
+        action: event.isInPictureInPictureMode ? 'Entered PiP Mode' : 'Returned from PiP',
+        result: `isInPictureInPictureMode: ${event.isInPictureInPictureMode}`
+      });
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [user]);
+
+  // Handle global screen routing based on callState transitions
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    if (callState === 'Dialing' || callState === 'Trying') {
+      NavigationService.navigate('OutgoingCall');
+    } else if (callState === 'Ringing') {
+      // Determine if we are receiving the call (incoming) or placing the call (outgoing)
+      const isIncoming =
+        CallService.activeSession?.constructor.name === 'Invitation' ||
+        incomingInvitationRef.current;
+      
+      if (isIncoming) {
+        NavigationService.navigate('IncomingCall');
+      } else {
+        NavigationService.navigate('OutgoingCall');
+      }
+    } else if (callState === 'Connected') {
+      NavigationService.navigate('ActiveCall');
+    } else if (callState === 'Idle') {
+      NavigationService.navigate('Home');
+    }
+  }, [callState, isAuthenticated]);
 
   // Trigger repeating system tone generator beep when peer puts us on hold
   useEffect(() => {
@@ -143,42 +238,122 @@ export const CallProvider = ({ children }) => {
     };
   }, [callState]);
 
-  const cleanupCallState = () => {
-    setCallState('Idle');
-    setIncomingInvitation(null);
-    setRemoteStream(null);
-    setLocalStream(null);
-    setIsMuted(false);
-    setIsSpeakerOn(false);
-    setIsHold(false);
-    setIsPeerOnHold(false);
-    setCallDuration(0);
-    CallService.cleanup();
-  };
+  // Handle system audio route initialization when call connects
+  useEffect(() => {
+    if (callState === 'Connected') {
+      if (AudioRouteModule && AudioRouteModule.setSpeakerphoneOn) {
+        AudioRouteModule.setSpeakerphoneOn(isSpeakerOn);
+      }
+    }
+  }, [callState, isSpeakerOn]);
+
+
 
   /**
    * Start an outgoing call.
    */
-  const makeCall = async (targetUsername) => {
+  const makeCall = async (targetUsername, isVideo = false) => {
     try {
       cleanupCallState();
-      const session = await CallService.makeCall(targetUsername, {
+      setIsVideoCall(isVideo);
+      setCallState('Dialing');
+
+      if (isVideo) {
+        Logger.log({
+          username: user?.username || 'System',
+          screen: 'OutgoingCall',
+          module: 'CallContext',
+          method: 'makeCall()',
+          action: 'Opening Camera',
+          result: 'Success',
+          isVideoCall: true,
+          callState: 'Dialing',
+        });
+
+        const preStream = await WebRTCService.getLocalStream({ audio: true, video: true });
+
+        Logger.log({
+          username: user?.username || 'System',
+          screen: 'OutgoingCall',
+          module: 'CallContext',
+          method: 'makeCall()',
+          action: 'Camera Stream Created',
+          result: `Video Track Count: ${preStream.getVideoTracks().length}, Audio Track Count: ${preStream.getAudioTracks().length}`,
+          isVideoCall: true,
+          callState: 'Dialing',
+        });
+
+        setLocalStream(preStream);
+        SipService.localStream = preStream;
+        CallService.localStreamReference = preStream;
+
+        Logger.log({
+          username: user?.username || 'System',
+          screen: 'OutgoingCall',
+          module: 'CallContext',
+          method: 'makeCall()',
+          action: 'Local Preview Attached',
+          result: 'RTCView Updated',
+          isVideoCall: true,
+          callState: 'Dialing',
+        });
+      } else {
+        const preStream = await WebRTCService.getLocalStream({ audio: true, video: false });
+        setLocalStream(preStream);
+        SipService.localStream = preStream;
+        CallService.localStreamReference = preStream;
+      }
+
+      await CallService.makeCall(targetUsername, {
+        isVideoCall: isVideo,
         onTrack: (remoteMediaStream) => {
+          Logger.log({
+            username: user?.username || 'System',
+            screen: 'CallScreen',
+            module: 'CallContext',
+            method: 'onTrack',
+            action: 'Remote Track Received',
+            result: `Track ID: ${remoteMediaStream.getVideoTracks()[0]?.id || 'N/A'}`,
+            isVideoCall: isVideo,
+            callState: 'Connected',
+          });
           setRemoteStream(remoteMediaStream);
+          setRemoteStreamKey(Date.now().toString());
+          Logger.log({
+            username: user?.username || 'System',
+            screen: 'CallScreen',
+            module: 'CallContext',
+            method: 'onTrack',
+            action: 'Remote Stream Attached',
+            result: 'RTCView Updated',
+            isVideoCall: isVideo,
+            callState: 'Connected',
+          });
         },
         onStateChange: (state) => {
           setCallState(state);
-          if (state === 'Ended') {
-            // Log call termination
+          if (state === 'Connected') {
             Logger.log({
               username: user?.username || 'System',
+              screen: 'CallScreen',
+              module: 'CallContext',
+              method: 'onStateChange()',
+              action: 'Call Connected',
+              result: 'Signaling and PeerConnection established',
+              isVideoCall: isVideo,
+              callState: 'Connected',
+            });
+          } else if (state === 'Ended') {
+            Logger.log({
+              username: user?.username || 'System',
+              screen: 'CallScreen',
               module: 'CallContext',
               method: 'onStateChange()',
               action: 'Call Ended',
-              result: `Duration ${formatTimer(callDuration)}. Reason: Normal`
+              result: `Duration: ${formatTimer(callDuration)}`,
+              isVideoCall: isVideo,
+              callState: 'Ended',
             });
-            
-            // Show Ended state briefly before going back to Idle
             setTimeout(() => {
               cleanupCallState();
             }, 2000);
@@ -188,12 +363,18 @@ export const CallProvider = ({ children }) => {
             }, 2000);
           }
         },
+        onConnectionStateChange: (netState) => {
+          if (netState === 'connected' || netState === 'completed') {
+            setWebrtcConnectionState('Good');
+          } else if (netState === 'checking') {
+            setWebrtcConnectionState('Checking');
+          } else if (netState === 'disconnected') {
+            setWebrtcConnectionState('Poor Connection');
+          } else if (netState === 'failed') {
+            setWebrtcConnectionState('Reconnecting');
+          }
+        }
       });
-
-      // Track local stream reference from CallService
-      if (CallService.localStreamReference) {
-        setLocalStream(CallService.localStreamReference);
-      }
     } catch (error) {
       Logger.log({
         username: user?.username || 'System',
@@ -218,20 +399,103 @@ export const CallProvider = ({ children }) => {
     try {
       const invitation = incomingInvitation;
       setIncomingInvitation(null);
+      setCallState('Connecting');
+
+      if (isVideoCall) {
+        Logger.log({
+          username: user?.username || 'System',
+          screen: 'IncomingCall',
+          module: 'CallContext',
+          method: 'acceptCall()',
+          action: 'Opening Camera',
+          result: 'Success',
+          isVideoCall: true,
+          callState: 'Connecting',
+        });
+
+        const preStream = await WebRTCService.getLocalStream({ audio: true, video: true });
+
+        Logger.log({
+          username: user?.username || 'System',
+          screen: 'IncomingCall',
+          module: 'CallContext',
+          method: 'acceptCall()',
+          action: 'Camera Stream Created',
+          result: `Video Track Count: ${preStream.getVideoTracks().length}, Audio Track Count: ${preStream.getAudioTracks().length}`,
+          isVideoCall: true,
+          callState: 'Connecting',
+        });
+
+        setLocalStream(preStream);
+        SipService.localStream = preStream;
+        CallService.localStreamReference = preStream;
+
+        Logger.log({
+          username: user?.username || 'System',
+          screen: 'IncomingCall',
+          module: 'CallContext',
+          method: 'acceptCall()',
+          action: 'Local Preview Attached',
+          result: 'RTCView Updated',
+          isVideoCall: true,
+          callState: 'Connecting',
+        });
+      } else {
+        const preStream = await WebRTCService.getLocalStream({ audio: true, video: false });
+        setLocalStream(preStream);
+        SipService.localStream = preStream;
+        CallService.localStreamReference = preStream;
+      }
 
       await CallService.acceptCall(invitation, {
+        isVideoCall: isVideoCall,
         onTrack: (remoteMediaStream) => {
+          Logger.log({
+            username: user?.username || 'System',
+            screen: 'CallScreen',
+            module: 'CallContext',
+            method: 'onTrack',
+            action: 'Remote Track Received',
+            result: `Track ID: ${remoteMediaStream.getVideoTracks()[0]?.id || 'N/A'}`,
+            isVideoCall: isVideoCall,
+            callState: 'Connected',
+          });
           setRemoteStream(remoteMediaStream);
+          setRemoteStreamKey(Date.now().toString());
+          Logger.log({
+            username: user?.username || 'System',
+            screen: 'CallScreen',
+            module: 'CallContext',
+            method: 'onTrack',
+            action: 'Remote Stream Attached',
+            result: 'RTCView Updated',
+            isVideoCall: isVideoCall,
+            callState: 'Connected',
+          });
         },
         onStateChange: (state) => {
           setCallState(state);
-          if (state === 'Ended') {
+          if (state === 'Connected') {
             Logger.log({
               username: user?.username || 'System',
+              screen: 'CallScreen',
+              module: 'CallContext',
+              method: 'onStateChange()',
+              action: 'Call Connected',
+              result: 'Signaling and PeerConnection established',
+              isVideoCall: isVideoCall,
+              callState: 'Connected',
+            });
+          } else if (state === 'Ended') {
+            Logger.log({
+              username: user?.username || 'System',
+              screen: 'CallScreen',
               module: 'CallContext',
               method: 'onStateChange()',
               action: 'Call Ended',
-              result: `Duration ${formatTimer(callDuration)}. Reason: Normal`
+              result: `Duration: ${formatTimer(callDuration)}`,
+              isVideoCall: isVideoCall,
+              callState: 'Ended',
             });
             setTimeout(() => {
               cleanupCallState();
@@ -242,11 +506,18 @@ export const CallProvider = ({ children }) => {
             }, 2000);
           }
         },
+        onConnectionStateChange: (netState) => {
+          if (netState === 'connected' || netState === 'completed') {
+            setWebrtcConnectionState('Good');
+          } else if (netState === 'checking') {
+            setWebrtcConnectionState('Checking');
+          } else if (netState === 'disconnected') {
+            setWebrtcConnectionState('Poor Connection');
+          } else if (netState === 'failed') {
+            setWebrtcConnectionState('Reconnecting');
+          }
+        }
       });
-
-      if (CallService.localStreamReference) {
-        setLocalStream(CallService.localStreamReference);
-      }
     } catch (error) {
       Logger.log({
         username: user?.username || 'System',
@@ -344,12 +615,47 @@ export const CallProvider = ({ children }) => {
   };
 
   /**
+   * Toggle camera feed on/off.
+   */
+  const toggleCamera = () => {
+    const nextState = !isCameraEnabled;
+    setIsCameraEnabled(nextState);
+    WebRTCService.setVideoEnabled(localStream, nextState);
+  };
+
+  /**
+   * Switch between front and rear cameras.
+   */
+  const switchCamera = () => {
+    const nextState = !isFrontCamera;
+    setIsFrontCamera(nextState);
+    WebRTCService.switchCamera(localStream);
+  };
+
+  /**
+   * Toggle system-level PiP mode (Android only).
+   */
+  const toggleSystemPip = () => {
+    if (PipModule && PipModule.enterPip) {
+      PipModule.enterPip();
+    }
+  };
+
+  /**
+   * Toggle in-app PiP mode (for overlay navigation).
+   */
+  const toggleInAppPip = () => {
+    setIsInAppPipActive(!isInAppPipActive);
+  };
+
+  /**
    * Format duration seconds to MM:SS string
    */
   const formatTimer = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    const pad = (num) => (num < 10 ? `0${num}` : `${num}`);
+    return `${pad(mins)}:${pad(secs)}`;
   };
 
   const getCallerName = () => {
@@ -383,6 +689,19 @@ export const CallProvider = ({ children }) => {
         toggleSpeaker,
         toggleHold,
         formatTimer,
+        // Video specific exports
+        isVideoCall,
+        isCameraEnabled,
+        isFrontCamera,
+        isSystemPipActive,
+        isInAppPipActive,
+        setIsInAppPipActive,
+        toggleCamera,
+        switchCamera,
+        toggleSystemPip,
+        toggleInAppPip,
+        remoteStreamKey,
+        webrtcConnectionState,
       }}
     >
       {children}

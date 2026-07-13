@@ -24,32 +24,40 @@ class WebRTCService {
   }
 
   /**
-   * Acquire local audio media stream.
+   * Acquire local media stream (Audio and optionally Video).
    * Called before starting or answering a call.
    * 
-   * @returns {Promise<MediaStream>} - Local media stream (audio-only)
+   * @param {Object} constraints - Media constraints (e.g. { audio: true, video: true })
+   * @returns {Promise<MediaStream>} - Local media stream
    */
-  async getLocalStream() {
+  async getLocalStream(constraints = { audio: true, video: false }) {
     Logger.log({
       username: this.username,
       module: 'WebRTCService',
       method: 'getLocalStream()',
       action: 'Media Stream Request',
-      result: 'Requesting microphone permissions and stream'
+      result: `Requesting stream with constraints: ${JSON.stringify(constraints)}`
     });
 
     try {
-      const stream = await mediaDevices.getUserMedia({
-        audio: true,
-        video: false, // Audio calling only
-      });
+      const finalConstraints = {
+        audio: constraints.audio !== false,
+        video: constraints.video ? {
+          facingMode: 'user', // Default to front camera
+          width: 640,
+          height: 480,
+          frameRate: 30,
+        } : false,
+      };
+
+      const stream = await mediaDevices.getUserMedia(finalConstraints);
 
       Logger.log({
         username: this.username,
         module: 'WebRTCService',
         method: 'getLocalStream()',
         action: 'Media Stream Success',
-        result: `Audio track gathered. ID: ${stream.getAudioTracks()[0]?.id}`
+        result: `Gathered ${stream.getTracks().length} tracks.`
       });
 
       return stream;
@@ -338,6 +346,51 @@ class WebRTCService {
 
     if (AudioRouteModule) {
       AudioRouteModule.setSpeakerphoneOn(useSpeaker);
+    }
+  }
+
+  /**
+   * Switch between front and rear cameras.
+   * 
+   * @param {MediaStream} localStream
+   */
+  switchCamera(localStream) {
+    if (localStream) {
+      localStream.getVideoTracks().forEach((track) => {
+        if (track._switchCamera) {
+          track._switchCamera();
+        }
+      });
+      
+      Logger.log({
+        username: this.username,
+        module: 'WebRTCService',
+        method: 'switchCamera()',
+        action: 'Camera Switched',
+        result: 'Toggled camera front/rear'
+      });
+    }
+  }
+
+  /**
+   * Enable or disable local video track feed.
+   * 
+   * @param {MediaStream} localStream
+   * @param {boolean} enabled
+   */
+  setVideoEnabled(localStream, enabled) {
+    if (localStream) {
+      localStream.getVideoTracks().forEach((track) => {
+        track.enabled = enabled;
+      });
+
+      Logger.log({
+        username: this.username,
+        module: 'WebRTCService',
+        method: 'setVideoEnabled()',
+        action: enabled ? 'Video Enabled' : 'Video Disabled',
+        result: `Local video track enabled: ${enabled}`
+      });
     }
   }
 

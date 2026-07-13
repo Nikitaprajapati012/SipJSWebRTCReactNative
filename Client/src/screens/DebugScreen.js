@@ -17,6 +17,7 @@ import {
   View,
   FlatList,
   StatusBar,
+  Platform,
 } from 'react-native';
 import Logger from '../services/Logger';
 import Icon from 'react-native-vector-icons/Ionicons';

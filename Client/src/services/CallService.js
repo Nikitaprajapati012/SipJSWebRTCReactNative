@@ -35,7 +35,7 @@ class CallService {
    *   - `onStateChange`: Triggers during dialing, ringing, answered, ended phases.
    * @returns {Promise<Inviter>} SIP.js Inviter session
    */
-  async makeCall(targetUsername, { onTrack, onStateChange }) {
+  async makeCall(targetUsername, { onTrack, onStateChange, isVideoCall, onConnectionStateChange }) {
     if (!SipService.userAgent) {
       throw new Error('SIP UserAgent is not initialized');
     }
@@ -48,13 +48,17 @@ class CallService {
       module: 'CallService',
       method: 'makeCall()',
       action: 'Call Initiated',
-      result: `Calling Bob/Callee: ${targetUsername}`
+      result: `Calling Bob/Callee: ${targetUsername}. Video Call: ${isVideoCall}`
     });
 
     onStateChange('Dialing');
 
     // Configure CustomSessionDescriptionHandler options so we can hook track/pc creation
     const sessionDescriptionHandlerOptions = {
+      constraints: {
+        audio: true,
+        video: isVideoCall,
+      },
       onTrackCallback: (remoteStream) => {
         this.remoteStreamReference = remoteStream;
         Logger.log({
@@ -69,12 +73,20 @@ class CallService {
       onPeerConnectionCreated: (pc, localStream) => {
         this.pcReference = pc;
         this.localStreamReference = localStream;
+        
+        pc.onconnectionstatechange = () => {
+          if (onConnectionStateChange) onConnectionStateChange(pc.connectionState);
+        };
+        pc.oniceconnectionstatechange = () => {
+          if (onConnectionStateChange) onConnectionStateChange(pc.iceConnectionState);
+        };
       }
     };
 
     // Statically assign callbacks to SipService singleton to ensure they are captured during description generation
     SipService.onPeerConnectionCreated = sessionDescriptionHandlerOptions.onPeerConnectionCreated;
     SipService.onTrackCallback = sessionDescriptionHandlerOptions.onTrackCallback;
+    SipService.constraints = sessionDescriptionHandlerOptions.constraints;
 
     const inviter = new Inviter(SipService.userAgent, calleeUri, {
       sessionDescriptionHandlerOptions,
@@ -114,19 +126,23 @@ class CallService {
    * @param {Invitation} invitation - Active SIP.js incoming session
    * @param {Object} hookHandlers - Call callbacks: { onTrack, onStateChange }
    */
-  async acceptCall(invitation, { onTrack, onStateChange }) {
+  async acceptCall(invitation, { onTrack, onStateChange, isVideoCall, onConnectionStateChange }) {
     Logger.log({
       username: this.username,
       screen: 'CallScreen',
       module: 'CallService',
       method: 'acceptCall()',
       action: 'Accepting Call',
-      result: `Answering incoming call from ${invitation.remoteIdentity.uri.user}`
+      result: `Answering incoming call from ${invitation.remoteIdentity.uri.user}. Video Call: ${isVideoCall}`
     });
 
     onStateChange('Connecting');
 
     const sessionDescriptionHandlerOptions = {
+      constraints: {
+        audio: true,
+        video: isVideoCall,
+      },
       onTrackCallback: (remoteStream) => {
         this.remoteStreamReference = remoteStream;
         Logger.log({
@@ -141,12 +157,20 @@ class CallService {
       onPeerConnectionCreated: (pc, localStream) => {
         this.pcReference = pc;
         this.localStreamReference = localStream;
+        
+        pc.onconnectionstatechange = () => {
+          if (onConnectionStateChange) onConnectionStateChange(pc.connectionState);
+        };
+        pc.oniceconnectionstatechange = () => {
+          if (onConnectionStateChange) onConnectionStateChange(pc.iceConnectionState);
+        };
       }
     };
 
     // Statically assign callbacks to SipService singleton to ensure they are captured during description generation
     SipService.onPeerConnectionCreated = sessionDescriptionHandlerOptions.onPeerConnectionCreated;
     SipService.onTrackCallback = sessionDescriptionHandlerOptions.onTrackCallback;
+    SipService.constraints = sessionDescriptionHandlerOptions.constraints;
 
     this.activeSession = invitation;
     this.attachSessionStateListeners(invitation, onStateChange);

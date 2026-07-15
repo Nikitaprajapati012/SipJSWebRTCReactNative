@@ -10,7 +10,15 @@ import { useCall } from '../hooks/useCall';
 import Icon from 'react-native-vector-icons/Ionicons';
 
 export default function OutgoingCallScreen() {
-  const { callerName, callState, hangup } = useCall();
+  const {
+    callerName,
+    callState,
+    isMuted,
+    isSpeakerOn,
+    toggleMute,
+    toggleSpeaker,
+    hangup,
+  } = useCall();
 
   const getInitials = (name) => {
     if (!name) return '?';
@@ -37,6 +45,34 @@ export default function OutgoingCallScreen() {
           </View>
 
           <View style={styles.controlsPanel}>
+            <View style={styles.controlsGrid}>
+              <TouchableOpacity
+                style={[styles.controlGridBtn, isMuted && styles.controlGridBtnActive]}
+                onPress={toggleMute}
+              >
+                <Icon
+                  name={isMuted ? 'mic-off' : 'mic'}
+                  size={24}
+                  color={isMuted ? '#38BDF8' : '#94A3B8'}
+                  style={{ marginBottom: 6 }}
+                />
+                <Text style={styles.controlGridLabel}>{isMuted ? 'Muted' : 'Mute'}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.controlGridBtn, isSpeakerOn && styles.controlGridBtnActive]}
+                onPress={toggleSpeaker}
+              >
+                <Icon
+                  name={isSpeakerOn ? 'volume-high' : 'volume-mute'}
+                  size={24}
+                  color={isSpeakerOn ? '#38BDF8' : '#94A3B8'}
+                  style={{ marginBottom: 6 }}
+                />
+                <Text style={styles.controlGridLabel}>{isSpeakerOn ? 'Speaker' : 'Earpiece'}</Text>
+              </TouchableOpacity>
+            </View>
+
             <View style={styles.actionRowSingle}>
               <TouchableOpacity style={[styles.actionButton, styles.declineBtn]} onPress={hangup}>
                 <Icon name="call" size={32} color="#FFFFFF" style={{ transform: [{ rotate: '135deg' }] }} />
@@ -104,11 +140,40 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
   },
+  controlsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    backgroundColor: '#1E293B',
+    borderRadius: 20,
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#334155',
+    marginBottom: 20,
+  },
+  controlGridBtn: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderRadius: 12,
+    marginHorizontal: 4,
+  },
+  controlGridBtnActive: {
+    backgroundColor: '#334155',
+    borderColor: '#38BDF8',
+    borderWidth: 1,
+  },
+  controlGridLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#94A3B8',
+  },
   actionRowSingle: {
     justifyContent: 'center',
     alignItems: 'center',
     width: '100%',
-    marginTop: 24,
+    marginTop: 12,
   },
   actionButton: {
     width: 85,

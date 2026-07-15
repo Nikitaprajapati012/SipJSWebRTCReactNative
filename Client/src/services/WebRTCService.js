@@ -157,6 +157,18 @@ class WebRTCService {
         return;
       }
 
+      let timeoutId = setTimeout(() => {
+        Logger.log({
+          username: this.username,
+          module: 'WebRTCService',
+          method: 'waitForIceGathering()',
+          action: 'ICE Gathering Timeout Triggered',
+          result: 'Proceeding with currently gathered candidates to speed up connection'
+        });
+        cleanup();
+        resolve();
+      }, 800);
+
       const onStateChange = () => {
         Logger.log({
           username: this.username,
@@ -167,9 +179,14 @@ class WebRTCService {
         });
 
         if (pc.iceGatheringState === 'complete') {
-          pc.removeEventListener('icegatheringstatechange', onStateChange);
+          cleanup();
           resolve();
         }
+      };
+
+      const cleanup = () => {
+        clearTimeout(timeoutId);
+        pc.removeEventListener('icegatheringstatechange', onStateChange);
       };
 
       pc.addEventListener('icegatheringstatechange', onStateChange);

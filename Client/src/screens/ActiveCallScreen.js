@@ -1,11 +1,18 @@
 /**
  * Client/src/screens/ActiveCallScreen.js
- * 
+ *
  * Immersive Active Call interface (Audio and Video layout).
  */
 
 import React from 'react';
-import { StyleSheet, View, StatusBar, SafeAreaView, TouchableOpacity, Text } from 'react-native';
+import {
+  StyleSheet,
+  View,
+  StatusBar,
+  SafeAreaView,
+  TouchableOpacity,
+  Text,
+} from 'react-native';
 import { useCall } from '../hooks/useCall';
 import Icon from 'react-native-vector-icons/Ionicons';
 
@@ -43,7 +50,7 @@ export default function ActiveCallScreen() {
     webrtcConnectionState,
   } = useCall();
 
-  const getInitials = (name) => {
+  const getInitials = name => {
     if (!name) return '?';
     return name.slice(0, 2).toUpperCase();
   };
@@ -77,11 +84,19 @@ export default function ActiveCallScreen() {
       <View style={styles.content}>
         <View style={styles.avatarSection}>
           <View style={styles.largeAvatar}>
-            <Text style={styles.largeAvatarText}>{getInitials(callerName)}</Text>
+            <Text style={styles.largeAvatarText}>
+              {getInitials(callerName)}
+            </Text>
           </View>
           <Text style={styles.callerNameText}>{callerName}</Text>
           <Text style={styles.timerText}>{formatTimer(callDuration)}</Text>
-          <Text style={isPeerOnHold ? styles.callStateSubtextHold : styles.callStateSubtextActive}>
+          <Text
+            style={
+              isPeerOnHold
+                ? styles.callStateSubtextHold
+                : styles.callStateSubtextActive
+            }
+          >
             {stateLabel}
           </Text>
         </View>
@@ -89,33 +104,71 @@ export default function ActiveCallScreen() {
         <View style={styles.controlsPanel}>
           <View style={styles.controlsGrid}>
             <TouchableOpacity
-              style={[styles.controlGridBtn, isMuted && styles.controlGridBtnActive]}
+              style={[
+                styles.controlGridBtn,
+                isMuted && styles.controlGridBtnActive,
+              ]}
               onPress={toggleMute}
             >
-              <Icon name={isMuted ? 'mic-off' : 'mic'} size={24} color={isMuted ? '#38BDF8' : '#94A3B8'} style={{ marginBottom: 6 }} />
-              <Text style={styles.controlGridLabel}>{isMuted ? 'Muted' : 'Mute'}</Text>
+              <Icon
+                name={isMuted ? 'mic-off' : 'mic'}
+                size={24}
+                color={isMuted ? '#38BDF8' : '#94A3B8'}
+                style={{ marginBottom: 6 }}
+              />
+              <Text style={styles.controlGridLabel}>
+                {isMuted ? 'Muted' : 'Mute'}
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.controlGridBtn, isSpeakerOn && styles.controlGridBtnActive]}
+              style={[
+                styles.controlGridBtn,
+                isSpeakerOn && styles.controlGridBtnActive,
+              ]}
               onPress={toggleSpeaker}
             >
-              <Icon name={isSpeakerOn ? 'volume-high' : 'volume-mute'} size={24} color={isSpeakerOn ? '#38BDF8' : '#94A3B8'} style={{ marginBottom: 6 }} />
-              <Text style={styles.controlGridLabel}>{isSpeakerOn ? 'Speaker' : 'Earpiece'}</Text>
+              <Icon
+                name={isSpeakerOn ? 'volume-high' : 'volume-mute'}
+                size={24}
+                color={isSpeakerOn ? '#38BDF8' : '#94A3B8'}
+                style={{ marginBottom: 6 }}
+              />
+              <Text style={styles.controlGridLabel}>
+                {isSpeakerOn ? 'Speaker' : 'Earpiece'}
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.controlGridBtn, isHold && styles.controlGridBtnActive]}
+              style={[
+                styles.controlGridBtn,
+                isHold && styles.controlGridBtnActive,
+              ]}
               onPress={toggleHold}
             >
-              <Icon name={isHold ? 'play' : 'pause'} size={24} color={isHold ? '#38BDF8' : '#94A3B8'} style={{ marginBottom: 6 }} />
-              <Text style={styles.controlGridLabel}>{isHold ? 'Resume' : 'Hold'}</Text>
+              <Icon
+                name={isHold ? 'play' : 'pause'}
+                size={24}
+                color={isHold ? '#38BDF8' : '#94A3B8'}
+                style={{ marginBottom: 6 }}
+              />
+              <Text style={styles.controlGridLabel}>
+                {isHold ? 'Resume' : 'Hold'}
+              </Text>
             </TouchableOpacity>
           </View>
 
           <View style={styles.actionRowSingle}>
-            <TouchableOpacity style={[styles.actionButton, styles.declineBtn]} onPress={hangup}>
-              <Icon name="call" size={32} color="#FFFFFF" style={{ transform: [{ rotate: '135deg' }] }} />
+            <TouchableOpacity
+              style={[styles.actionButton, styles.declineBtn]}
+              onPress={hangup}
+            >
+              <Icon
+                name="call"
+                size={32}
+                color="#FFFFFF"
+                style={{ transform: [{ rotate: '135deg' }] }}
+              />
             </TouchableOpacity>
           </View>
         </View>
@@ -157,38 +210,39 @@ export default function ActiveCallScreen() {
         isFront={isFrontCamera}
       />
 
-      {/* Floating Top Overlay Header */}
-      <CallHeader
-        participantName={callerName}
-        isVideoCall={true}
-        callDuration={callDuration}
-        callState={callState}
-        isPeerOnHold={isPeerOnHold}
-        webrtcConnectionState={webrtcConnectionState}
-      />
-
-      {/* Loading overlay for initial negotiation steps */}
-      {!remoteStream && (
-        <LoadingOverlay message="Connecting video feed..." />
-      )}
-
-      {/* Absolute Bottom controls container */}
-      <View style={styles.absoluteControlsContainer} pointerEvents="box-none">
-        <CallControls
-          callState={callState}
-          isIncomingCall={false}
+      {/* High-elevation Overlays Container to enforce layering on Android */}
+      <View style={styles.overlayContainer} pointerEvents="box-none">
+        {/* Floating Top Overlay Header */}
+        <CallHeader
+          participantName={callerName}
           isVideoCall={true}
-          isMuted={isMuted}
-          isSpeakerOn={isSpeakerOn}
-          isCameraEnabled={isCameraEnabled}
-          isHold={isHold}
-          toggleMute={toggleMute}
-          toggleSpeaker={toggleSpeaker}
-          toggleCamera={toggleCamera}
-          switchCamera={switchCamera}
-          toggleHold={toggleHold}
-          hangup={hangup}
+          callDuration={callDuration}
+          callState={callState}
+          isPeerOnHold={isPeerOnHold}
+          webrtcConnectionState={webrtcConnectionState}
         />
+
+        {/* Loading overlay for initial negotiation steps */}
+        {!remoteStream && <LoadingOverlay message="Connecting video feed..." />}
+
+        {/* Absolute Bottom controls container */}
+        <View style={styles.controlsWrapper} pointerEvents="box-none">
+          <CallControls
+            callState={callState}
+            isIncomingCall={false}
+            isVideoCall={true}
+            isMuted={isMuted}
+            isSpeakerOn={isSpeakerOn}
+            isCameraEnabled={isCameraEnabled}
+            isHold={isHold}
+            toggleMute={toggleMute}
+            toggleSpeaker={toggleSpeaker}
+            toggleCamera={toggleCamera}
+            switchCamera={switchCamera}
+            toggleHold={toggleHold}
+            hangup={hangup}
+          />
+        </View>
       </View>
     </View>
   );
@@ -211,17 +265,20 @@ const styles = StyleSheet.create({
   videoCanvas: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: '#0F172A',
-    zIndex: -1,
   },
-  absoluteControlsContainer: {
+  overlayContainer: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'transparent',
+    zIndex: 10,
+    elevation: 20,
+  },
+  controlsWrapper: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
     paddingHorizontal: 20,
     paddingBottom: 35,
-    zIndex: 10,
-    elevation: 20,
   },
   content: {
     flex: 1,

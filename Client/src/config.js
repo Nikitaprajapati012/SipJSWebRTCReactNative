@@ -19,9 +19,9 @@ export const SERVER_HOST = (() => {
       Fingerprint?.startsWith('generic') ||
       Fingerprint?.startsWith('unknown');
 
-    return isEmulator ? '10.0.2.2' : '172.16.25.30';
+    return isEmulator ? '10.0.2.2' : '192.168.1.72';
   }
-  return '172.16.25.30';
+  return '192.168.1.72';
 })();
 
 export const API_URL = `http://${SERVER_HOST}:3000/api`;

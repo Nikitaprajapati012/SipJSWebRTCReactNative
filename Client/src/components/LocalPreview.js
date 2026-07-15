@@ -76,7 +76,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#38BDF8',
     overflow: 'hidden',
-    backgroundColor: '#1E293B',
+    backgroundColor: 'transparent',
     zIndex: 1000,
     elevation: 8,
     shadowColor: '#000000',

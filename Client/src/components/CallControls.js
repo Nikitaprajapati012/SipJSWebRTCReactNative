@@ -1,6 +1,6 @@
 /**
  * Client/src/components/CallControls.js
- * 
+ *
  * Grid Controls Overlay Component.
  * Dynamically switches buttons depending on Call State (Incoming, Outgoing, Active).
  */
@@ -55,12 +55,17 @@ export default function CallControls({
   }
 
   // Render layout for outgoing dialing/trying calls
-  const isOutgoing = callState === 'Dialing' || callState === 'Trying' || callState === 'Ringing';
+  const isOutgoing =
+    callState === 'Dialing' ||
+    callState === 'Trying' ||
+    callState === 'Ringing';
   if (isOutgoing && !isIncomingCall) {
     return (
       <View style={[styles.activePanel, containerStyle]}>
         {/* Outgoing Call controls grid */}
-        <View style={[styles.controlsGrid, isVideoCall && styles.controlsGridVideo]}>
+        <View
+          style={[styles.controlsGrid, isVideoCall && styles.controlsGridVideo]}
+        >
           <RoundButton
             iconName={isMuted ? 'mic-off' : 'mic'}
             onPress={toggleMute}
@@ -109,18 +114,20 @@ export default function CallControls({
   // Render layout for active call
   return (
     <View style={[styles.activePanel, containerStyle]}>
-      <View style={[styles.controlsGrid, isVideoCall && styles.controlsGridVideo]}>
+      <View
+        style={[styles.controlsGrid, isVideoCall && styles.controlsGridVideo]}
+      >
         <RoundButton
           iconName={isMuted ? 'mic-off' : 'mic'}
           onPress={toggleMute}
-          label={isMuted ? 'Muted' : 'Mute'}
+          // label={isMuted ? 'Muted' : 'Mute'}
           isActive={isMuted}
         />
 
         <RoundButton
           iconName={isSpeakerOn ? 'volume-high' : 'volume-mute'}
           onPress={toggleSpeaker}
-          label={isSpeakerOn ? 'Speaker' : 'Earpiece'}
+          // label={isSpeakerOn ? 'Speaker' : 'Earpiece'}
           isActive={isSpeakerOn}
         />
 
@@ -129,31 +136,33 @@ export default function CallControls({
             <RoundButton
               iconName={isCameraEnabled ? 'videocam' : 'videocam-off'}
               onPress={toggleCamera}
-              label={isCameraEnabled ? 'Cam On' : 'Cam Off'}
+              // label={isCameraEnabled ? 'Cam On' : 'Cam Off'}
               isActive={!isCameraEnabled}
             />
 
             <RoundButton
               iconName="camera-reverse"
               onPress={switchCamera}
-              label="Flip"
+              // label="Flip"
             />
           </>
         )}
 
-        <RoundButton
-          iconName={isHold ? 'play' : 'pause'}
-          onPress={toggleHold}
-          label={isHold ? 'Resume' : 'Hold'}
-          isActive={isHold}
-        />
+        {!isVideoCall && (
+          <RoundButton
+            iconName={isHold ? 'play' : 'pause'}
+            onPress={toggleHold}
+            label={isHold ? 'Resume' : 'Hold'}
+            isActive={isHold}
+          />
+        )}
       </View>
 
       <View style={styles.singleRow}>
         <RoundButton
           iconName="call"
           onPress={hangup}
-          label="End Call"
+          // label="End Call"
           inactiveBackgroundColor="#EF4444"
           inactiveIconColor="#FFFFFF"
           buttonSize={64}

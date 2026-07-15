@@ -21,10 +21,8 @@ class StorageService {
    */
   async saveSession(token, username) {
     try {
-      await AsyncStorage.multiSet([
-        [TOKEN_KEY, token],
-        [USERNAME_KEY, username]
-      ]);
+      await AsyncStorage.setItem(TOKEN_KEY, token);
+      await AsyncStorage.setItem(USERNAME_KEY, username);
       Logger.log({
         username,
         module: 'StorageService',
@@ -51,7 +49,8 @@ class StorageService {
    */
   async getSession() {
     try {
-      const [[, token], [, username]] = await AsyncStorage.multiGet([TOKEN_KEY, USERNAME_KEY]);
+      const token = await AsyncStorage.getItem(TOKEN_KEY);
+      const username = await AsyncStorage.getItem(USERNAME_KEY);
       if (token && username) {
         Logger.log({
           username,
@@ -79,7 +78,8 @@ class StorageService {
    */
   async clearSession(username = 'System') {
     try {
-      await AsyncStorage.multiRemove([TOKEN_KEY, USERNAME_KEY]);
+      await AsyncStorage.removeItem(TOKEN_KEY);
+      await AsyncStorage.removeItem(USERNAME_KEY);
       Logger.log({
         username,
         module: 'StorageService',

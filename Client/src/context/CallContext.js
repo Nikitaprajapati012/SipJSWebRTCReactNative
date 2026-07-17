@@ -238,14 +238,17 @@ export const CallProvider = ({ children }) => {
     };
   }, [callState]);
 
-  // Handle system audio route initialization when call connects
+  // Handle system audio route initialization and PiP registration when call connects
   useEffect(() => {
     if (callState === 'Connected') {
       if (AudioRouteModule && AudioRouteModule.setSpeakerphoneOn) {
         AudioRouteModule.setSpeakerphoneOn(isSpeakerOn);
       }
+      if (PipModule && PipModule.setIsVideoCallActive) {
+        PipModule.setIsVideoCallActive(isVideoCall);
+      }
     }
-  }, [callState, isSpeakerOn]);
+  }, [callState, isSpeakerOn, isVideoCall]);
 
 
 

@@ -65,6 +65,7 @@ export default function ActiveCallScreen() {
           placeholderName={callerName}
           placeholderText="Connecting..."
           zOrder={0}
+          objectFit="cover"
         />
       </View>
     );
@@ -200,6 +201,7 @@ export default function ActiveCallScreen() {
           placeholderName={callerName}
           placeholderText="Waiting for Video..."
           zOrder={0}
+          objectFit="cover"
         />
       </View>
 

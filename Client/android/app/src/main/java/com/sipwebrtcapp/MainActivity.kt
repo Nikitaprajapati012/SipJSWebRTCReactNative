@@ -40,18 +40,16 @@ class MainActivity : ReactActivity() {
     }
   }
 
+  @Deprecated("Deprecated in Java")
+  override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean) {
+    super.onPictureInPictureModeChanged(isInPictureInPictureMode)
+    PipModule.emitPipModeChanged(isInPictureInPictureMode)
+  }
+
   override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
     super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
 
-    // Broadcast the PiP mode change event to JavaScript
-    val reactHost = (application as ReactApplication).reactHost
-    val reactContext = reactHost?.currentReactContext
-    if (reactContext != null) {
-      val params = Arguments.createMap()
-      params.putBoolean("isInPictureInPictureMode", isInPictureInPictureMode)
-      reactContext
-        .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-        .emit("onPipModeChanged", params)
-    }
+    // Broadcast the PiP mode change event to JavaScript via PipModule
+    PipModule.emitPipModeChanged(isInPictureInPictureMode)
   }
 }

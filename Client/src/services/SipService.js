@@ -361,6 +361,18 @@ class SipService {
    */
   async unregister() {
     if (this.registerer) {
+      // Avoid sending unregister if already terminated or disposed
+      if (this.registerer.state === 'Terminated') {
+        Logger.log({
+          username: this.username,
+          module: 'SipService',
+          method: 'unregister()',
+          action: 'SIP Unregister Skipped',
+          result: 'Registerer is already in Terminated state'
+        });
+        return;
+      }
+
       Logger.log({
         username: this.username,
         module: 'SipService',
@@ -391,15 +403,37 @@ class SipService {
    * Stop the UserAgent.
    */
   async stop() {
-    await this.unregister();
-    if (this.userAgent) {
+    try {
+      await this.unregister();
+    } catch (e) {
       Logger.log({
         username: this.username,
         module: 'SipService',
         method: 'stop()',
-        action: 'SIP UserAgent Stopping'
+        action: 'SIP Unregister Exception Caught',
+        result: e.message
       });
-      await this.userAgent.stop();
+    }
+
+    try {
+      if (this.userAgent) {
+        Logger.log({
+          username: this.username,
+          module: 'SipService',
+          method: 'stop()',
+          action: 'SIP UserAgent Stopping'
+        });
+        await this.userAgent.stop();
+      }
+    } catch (e) {
+      Logger.log({
+        username: this.username,
+        module: 'SipService',
+        method: 'stop()',
+        action: 'SIP UserAgent Stop Exception Caught',
+        result: e.message
+      });
+    } finally {
       this.userAgent = null;
       this.registerer = null;
     }

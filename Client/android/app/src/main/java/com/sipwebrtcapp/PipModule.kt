@@ -6,9 +6,15 @@ import android.app.PictureInPictureParams
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.Arguments
+import com.facebook.react.modules.core.DeviceEventManagerModule
 import android.util.Log
 
 class PipModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
+
+    init {
+        instance = this
+    }
 
     override fun getName(): String {
         return "PipModule"
@@ -17,6 +23,24 @@ class PipModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaMod
     companion object {
         @JvmStatic
         var isVideoCallActive: Boolean = false
+
+        @Volatile
+        var instance: PipModule? = null
+
+        @JvmStatic
+        fun emitPipModeChanged(isInPipMode: Boolean) {
+            val context = instance?.reactApplicationContext ?: return
+            try {
+                val params = Arguments.createMap()
+                params.putBoolean("isInPictureInPictureMode", isInPipMode)
+                context
+                    .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                    .emit("onPipModeChanged", params)
+                Log.d("PipModule", "Emitted onPipModeChanged to JS: $isInPipMode")
+            } catch (e: Exception) {
+                Log.e("PipModule", "Failed to emit onPipModeChanged: ${e.message}")
+            }
+        }
     }
 
     @ReactMethod

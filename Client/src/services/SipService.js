@@ -27,33 +27,39 @@ class SocketIOTransport {
   constructor(logger, options) {
     this.logger = logger;
     this.options = options;
+    this.state = 'Connected';
+    this.protocol = 'WS';
     
     this.onConnect = undefined;
     this.onDisconnect = undefined;
     this.onMessage = undefined;
 
-    // Listen for raw SIP packets routed from the server
-    SocketService.on('sip-incoming-msg', (msg) => {
+    this._incomingHandler = (msg) => {
       if (this.onMessage) {
         this.onMessage(msg);
       }
-    });
+    };
+
+    // Listen for raw SIP packets routed from the server
+    SocketService.on('sip-incoming-msg', this._incomingHandler);
 
     // Mirror connection states
     SocketService.on('connect', () => {
+      this.state = 'Connected';
       if (this.onConnect) this.onConnect();
     });
 
     SocketService.on('disconnect', () => {
+      this.state = 'Disconnected';
       if (this.onDisconnect) this.onDisconnect();
     });
   }
 
   async connect() {
+    this.state = 'Connected';
     if (SocketService.isConnected()) {
       if (this.onConnect) this.onConnect();
     } else {
-      // Re-trigger connect if socket disconnected
       Logger.log({
         module: 'SIP-Transport',
         method: 'connect()',
@@ -63,11 +69,13 @@ class SocketIOTransport {
   }
 
   async disconnect() {
-    Logger.log({
-      module: 'SIP-Transport',
-      method: 'disconnect()',
-      action: 'Disconnecting Transport'
-    });
+    this.state = 'Disconnected';
+    if (this.onDisconnect) this.onDisconnect();
+  }
+
+  dispose() {
+    this.state = 'Disconnected';
+    SocketService.off('sip-incoming-msg', this._incomingHandler);
   }
 
   isConnected() {

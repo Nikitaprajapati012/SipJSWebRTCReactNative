@@ -81,15 +81,21 @@ export const CallProvider = ({ children }) => {
     }
   }, []);
 
+  const cleanupCallStateRef = useRef(cleanupCallState);
+  useEffect(() => {
+    cleanupCallStateRef.current = cleanupCallState;
+  }, [cleanupCallState]);
+
   // Initialize and tear down SipService alongside socket connection status
   useEffect(() => {
-    if (isSocketConnected && user) {
-      SipService.start(user.username, {
+    const currentUsername = user?.username;
+    if (isSocketConnected && currentUsername) {
+      SipService.start(currentUsername, {
         onIncomingCall: (invitation) => {
           // If we are busy, reject the call automatically
           if (CallService.activeSession || incomingInvitationRef.current) {
             Logger.log({
-              username: user.username,
+              username: currentUsername,
               module: 'CallContext',
               method: 'onIncomingCall',
               action: 'Auto Reject Ringing',
@@ -106,7 +112,7 @@ export const CallProvider = ({ children }) => {
           setIsVideoCall(isVideo);
 
           Logger.log({
-            username: user.username,
+            username: currentUsername,
             screen: 'IncomingCall',
             module: 'CallContext',
             method: 'onIncomingCall',
@@ -121,13 +127,13 @@ export const CallProvider = ({ children }) => {
           invitation.stateChange.addListener((state) => {
             if (state === SessionState.Terminated) {
               Logger.log({
-                username: user.username,
+                username: currentUsername,
                 module: 'CallContext',
                 method: 'onIncomingCall',
                 action: 'Incoming Invitation Terminated by Caller',
                 result: 'Resetting UI state to Idle'
               });
-              cleanupCallState();
+              if (cleanupCallStateRef.current) cleanupCallStateRef.current();
             }
           });
         },
@@ -136,7 +142,7 @@ export const CallProvider = ({ children }) => {
       // Listen for hold states from the peer
       SocketService.on('call-hold-state', ({ from, isHold: peerHoldState }) => {
         Logger.log({
-          username: user.username,
+          username: currentUsername,
           module: 'CallContext',
           method: 'onCallHoldState',
           action: peerHoldState ? 'Peer Placed Us on Hold' : 'Peer Resumed Call',
@@ -149,13 +155,10 @@ export const CallProvider = ({ children }) => {
       return () => {
         SipService.stop();
         SocketService.off('call-hold-state');
-        cleanupCallState();
+        if (cleanupCallStateRef.current) cleanupCallStateRef.current();
       };
-    } else {
-      SipService.stop();
-      cleanupCallState();
     }
-  }, [isSocketConnected, user, cleanupCallState]);
+  }, [isSocketConnected, user?.username]);
 
   // Listen for Picture-in-Picture mode changes from native code (Android)
   useEffect(() => {

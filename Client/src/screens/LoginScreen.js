@@ -2,11 +2,11 @@
  * Client/src/screens/LoginScreen.js
  * 
  * Premium, dark-themed Login Screen.
- * Provides credentials inputs and a tap-to-autofill quick panel featuring
- * Alice, Bob, Charlie, David, Emily, Jack for fast testing.
+ * Provides credentials inputs, editable server IP configuration for robust network connection,
+ * and a tap-to-autofill quick panel featuring Alice, Bob, Charlie, David, Emily, Jack.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   SafeAreaView,
   StyleSheet,
@@ -20,6 +20,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
+import { getServerHost, setServerHost, detectServerHost } from '../config';
 
 const MOCK_USERS = [
   { name: 'Alice', username: 'alice', password: '123' },
@@ -34,7 +35,13 @@ export default function LoginScreen() {
   const { login, isLoading } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [serverHost, setServerHostState] = useState(getServerHost());
+  const [showServerSettings, setShowServerSettings] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    setServerHostState(getServerHost());
+  }, []);
 
   const handleLogin = async () => {
     if (!username.trim() || !password) {
@@ -42,10 +49,20 @@ export default function LoginScreen() {
       return;
     }
     setError('');
+    
+    // Save current server host setting before login
+    await setServerHost(serverHost);
+
     const result = await login(username, password);
     if (!result.success) {
-      setError(result.error || 'Authentication failed');
+      setError(result.error || 'Authentication failed. Check server IP / network.');
     }
+  };
+
+  const handleResetHost = async () => {
+    const autoHost = detectServerHost();
+    setServerHostState(autoHost);
+    await setServerHost('');
   };
 
   const handleQuickFill = (user) => {
@@ -91,6 +108,34 @@ export default function LoginScreen() {
               autoCapitalize="none"
               autoCorrect={false}
             />
+
+            {/* Server Settings Toggle */}
+            <TouchableOpacity
+              style={styles.serverToggleHeader}
+              onPress={() => setShowServerSettings(!showServerSettings)}
+            >
+              <Text style={styles.serverToggleText}>
+                {showServerSettings ? '▼ Server Settings' : '► Server IP: ' + serverHost}
+              </Text>
+            </TouchableOpacity>
+
+            {showServerSettings && (
+              <View style={styles.serverSettingsBox}>
+                <Text style={styles.serverLabel}>Server Host / IP Address</Text>
+                <TextInput
+                  style={styles.serverInput}
+                  placeholder="e.g. 192.168.1.72 or localhost"
+                  placeholderTextColor="#64748B"
+                  value={serverHost}
+                  onChangeText={setServerHostState}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <TouchableOpacity style={styles.resetButton} onPress={handleResetHost}>
+                  <Text style={styles.resetButtonText}>Auto-Detect IP ({detectServerHost()})</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
@@ -151,7 +196,7 @@ const styles = StyleSheet.create({
   },
   headerContainer: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 32,
   },
   titleText: {
     fontSize: 36,
@@ -195,6 +240,49 @@ const styles = StyleSheet.create({
     color: '#F8FAFC',
     fontSize: 16,
     marginBottom: 20,
+  },
+  serverToggleHeader: {
+    marginBottom: 16,
+    paddingVertical: 6,
+  },
+  serverToggleText: {
+    color: '#38BDF8',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  serverSettingsBox: {
+    backgroundColor: '#0F172A',
+    borderColor: '#334155',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 20,
+  },
+  serverLabel: {
+    color: '#94A3B8',
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
+  serverInput: {
+    backgroundColor: '#1E293B',
+    borderColor: '#475569',
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    color: '#38BDF8',
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  resetButton: {
+    alignSelf: 'flex-start',
+  },
+  resetButtonText: {
+    color: '#64748B',
+    fontSize: 12,
+    textDecorationLine: 'underline',
   },
   errorText: {
     color: '#F43F5E', // Rose 500

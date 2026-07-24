@@ -1,6 +1,6 @@
 /**
  * Client/src/hooks/useAuth.js
- * 
+ *
  * Custom hook to consume AuthContext properties (user, login, logout, isLoading).
  */
 

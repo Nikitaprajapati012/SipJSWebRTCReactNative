@@ -6,7 +6,7 @@
  */
 
 import axios from 'axios';
-import { API_URL } from '../config';
+import { getApiUrl } from '../config';
 import SocketService from './SocketService';
 import Logger from './Logger';
 
@@ -36,7 +36,7 @@ class UserService {
     });
 
     try {
-      const response = await axios.get(`${API_URL}/users`, {
+      const response = await axios.get(`${getApiUrl()}/users`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },

@@ -6,7 +6,7 @@
  */
 
 import { io } from 'socket.io-client';
-import { SOCKET_URL } from '../config';
+import { getSocketUrl } from '../config';
 import Logger from './Logger';
 
 class SocketService {
@@ -26,13 +26,14 @@ class SocketService {
    */
   connect(token, username, onConnectionEstablished, onDisconnect) {
     this.username = username;
+    const socketUrl = getSocketUrl();
 
     Logger.log({
       username: this.username,
       module: 'SocketService',
       method: 'connect()',
       action: 'Socket Connection Started',
-      result: `Connecting to ${SOCKET_URL}`
+      result: `Connecting to ${socketUrl}`
     });
 
     // Close any previous socket
@@ -40,7 +41,7 @@ class SocketService {
       this.socket.disconnect();
     }
 
-    this.socket = io(SOCKET_URL, {
+    this.socket = io(socketUrl, {
       auth: { token },
       transports: ['websocket'],
       autoConnect: true,

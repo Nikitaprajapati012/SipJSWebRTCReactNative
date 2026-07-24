@@ -6,7 +6,7 @@
  */
 
 import axios from 'axios';
-import { API_URL } from '../config';
+import { getApiUrl } from '../config';
 import StorageService from './StorageService';
 import Logger from './Logger';
 
@@ -32,7 +32,7 @@ class AuthService {
     });
 
     try {
-      const response = await axios.post(`${API_URL}/auth/login`, {
+      const response = await axios.post(`${getApiUrl()}/auth/login`, {
         username: formattedUsername,
         password,
       });

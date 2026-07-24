@@ -6,6 +6,7 @@
  */
 
 import React, { createContext, useState, useEffect } from 'react';
+import { initServerHost } from '../config';
 import AuthService from '../services/AuthService';
 import StorageService from '../services/StorageService';
 import UserService from '../services/UserService';
@@ -22,6 +23,7 @@ export const AuthProvider = ({ children }) => {
   // Check storage on boot to attempt auto-login
   useEffect(() => {
     const restoreSession = async () => {
+      await initServerHost();
       const session = await StorageService.getSession();
       if (session) {
         setUser(session);

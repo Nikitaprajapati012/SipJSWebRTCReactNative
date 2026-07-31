@@ -29,7 +29,7 @@ class SocketIOTransport {
     this.options = options;
     this.state = 'Connected';
     this.protocol = 'WS';
-    
+
     this.onConnect = undefined;
     this.onDisconnect = undefined;
     this.onMessage = undefined;
@@ -99,7 +99,7 @@ class CustomSessionDescriptionHandler {
     this.peerConnection = null;
     this.localStream = sipServiceInstance?.localStream || null;
     this.remoteStream = null;
-    
+
     // Store callbacks defined by CallService / SipService
     const handlerOptions = options?.sessionDescriptionHandlerOptions || options;
     this.onTrackCallback = handlerOptions?.onTrackCallback || sipServiceInstance?.onTrackCallback;
@@ -238,7 +238,7 @@ class SipService {
     this.userAgent = null;
     this.registerer = null;
     this.username = 'System';
-    
+
     // Callbacks to hook into user interface
     this.onIncomingCall = null;
     this.onCallStateChange = null;
@@ -286,7 +286,7 @@ class SipService {
             action: 'Incoming SIP INVITE',
             result: `From: ${invitation.remoteIdentity.uri.user}`
           });
-          
+
           if (this.onIncomingCall) {
             this.onIncomingCall(invitation);
           }
@@ -305,7 +305,7 @@ class SipService {
       });
 
       await this.userAgent.start();
-      
+
       Logger.log({
         username: this.username,
         module: 'SipService',
@@ -343,7 +343,7 @@ class SipService {
     });
 
     this.registerer = new Registerer(this.userAgent);
-    
+
     try {
       await this.registerer.register();
       Logger.log({

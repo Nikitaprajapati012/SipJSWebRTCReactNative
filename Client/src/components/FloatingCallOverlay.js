@@ -1,3 +1,16 @@
+/**
+ * Client/src/components/FloatingCallOverlay.js
+ * 
+ * Cross-Platform React Native Picture-in-Picture (PiP) Floating Overlay.
+ * 
+ * Supported Platforms: iOS & Android
+ * 
+ * Mechanism:
+ * Uses React Native's native Animated framework and PanResponder gesture handler to render 
+ * a floating, draggable WebRTC RTCView overlay above any screen in the app.
+ * This guarantees seamless video calling while navigating screens on both iOS and Android.
+ */
+
 import React, { useRef } from 'react';
 import {
   StyleSheet,

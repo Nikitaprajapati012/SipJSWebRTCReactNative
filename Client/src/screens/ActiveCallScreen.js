@@ -55,7 +55,12 @@ export default function ActiveCallScreen() {
     return name.slice(0, 2).toUpperCase();
   };
 
-  // Android Picture-in-Picture layout
+  // =========================================================================
+  // ANDROID-ONLY SYSTEM NATIVE PIP RENDERER (KEPT IN COMMENT FOR REFERENCE)
+  // Native OS PiP mode shrinks the entire Activity window on Android.
+  // For cross-platform iOS & Android PiP, use FloatingCallOverlay.js instead.
+  // =========================================================================
+  /*
   if (isSystemPipActive) {
     return (
       <View style={styles.pipContainer}>
@@ -70,6 +75,7 @@ export default function ActiveCallScreen() {
       </View>
     );
   }
+  */
 
   // Active Audio Call layout
   const renderAudioCall = () => {

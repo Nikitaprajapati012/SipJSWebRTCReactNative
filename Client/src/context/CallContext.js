@@ -160,16 +160,21 @@ export const CallProvider = ({ children }) => {
     }
   }, [isSocketConnected, user?.username]);
 
-  // Listen for Picture-in-Picture mode changes from native code (Android)
+  // =========================================================================
+  // ANDROID-ONLY NATIVE SYSTEM PIP LISTENER (KEPT FOR REFERENCE)
+  // Note: Native OS-level PiP (PictureInPictureParams) relies on Android Activity lifecycle.
+  // iOS does not support system-level PiP for raw WebRTC RTCView without custom AVPlayer native wrappers.
+  // =========================================================================
+  /*
   useEffect(() => {
+    if (Platform.OS !== 'android') return;
     const subscription = DeviceEventEmitter.addListener('onPipModeChanged', (event) => {
       setIsSystemPipActive(event.isInPictureInPictureMode);
-      
       Logger.log({
         username: user?.username || 'System',
         module: 'CallContext',
         method: 'onPipModeChanged',
-        action: event.isInPictureInPictureMode ? 'Entered PiP Mode' : 'Returned from PiP',
+        action: event.isInPictureInPictureMode ? 'Entered Android Native PiP' : 'Returned from Android Native PiP',
         result: `isInPictureInPictureMode: ${event.isInPictureInPictureMode}`
       });
     });
@@ -178,6 +183,7 @@ export const CallProvider = ({ children }) => {
       subscription.remove();
     };
   }, [user]);
+  */
 
   // Handle global screen routing based on callState transitions
   useEffect(() => {
@@ -638,20 +644,32 @@ export const CallProvider = ({ children }) => {
     WebRTCService.switchCamera(localStream);
   };
 
-  /**
-   * Toggle system-level PiP mode (Android only).
-   */
+  // =========================================================================
+  // ANDROID-ONLY NATIVE SYSTEM PIP IMPLEMENTATION (KEPT IN COMMENT FOR REFERENCE)
+  // Note: Native OS-level PiP via PipModule uses Android Activity enterPictureInPictureMode().
+  // iOS does not natively support system-level PiP for raw WebRTC RTCView.
+  // =========================================================================
+  /*
   const toggleSystemPip = () => {
-    if (PipModule && PipModule.enterPip) {
+    if (Platform.OS === 'android' && PipModule && PipModule.enterPip) {
       PipModule.enterPip();
     }
   };
+  */
 
   /**
-   * Toggle in-app PiP mode (for overlay navigation).
+   * Cross-Platform React Native PiP Toggle (Works on iOS & Android).
+   * Minimizes the active call interface into a draggable floating overlay window.
    */
   const toggleInAppPip = () => {
     setIsInAppPipActive(!isInAppPipActive);
+  };
+
+  /**
+   * Unified Cross-Platform PiP Trigger
+   */
+  const togglePip = () => {
+    toggleInAppPip();
   };
 
   /**
@@ -704,8 +722,8 @@ export const CallProvider = ({ children }) => {
         setIsInAppPipActive,
         toggleCamera,
         switchCamera,
-        toggleSystemPip,
         toggleInAppPip,
+        togglePip,
         remoteStreamKey,
         webrtcConnectionState,
       }}

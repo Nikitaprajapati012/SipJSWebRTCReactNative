@@ -44,6 +44,13 @@ function logServer(module, action, detail = '') {
 }
 
 /**
+ * REST API: Health Check (used by Client for auto-discovering server IP)
+ */
+app.get('/api/health', (req, res) => {
+  return res.json({ success: true, status: 'ok', timestamp: Date.now() });
+});
+
+/**
  * REST API: User Login
  * Returns a mock authorization token if credentials are valid.
  */
@@ -390,10 +397,10 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`====================================================`);
   console.log(` MOCK SIP / WEBRTC SIGNALING SERVER IS RUNNING`);
-  console.log(` Listening on port: ${PORT}`);
+  console.log(` Listening on all interfaces (0.0.0.0:${PORT})`);
   console.log(` REST APIs: http://localhost:${PORT}/api/auth/login`);
   console.log(` Socket.IO Endpoint: ws://localhost:${PORT}`);
   console.log(`====================================================`);

@@ -1,0 +1,12 @@
+{
+  "name": "sip-webrtc-app-root",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "android": "npm run android --prefix Client",
+    "ios": "npm run ios --prefix Client",
+    "start": "npm start --prefix Client",
+    "server": "npm start --prefix Server",
+    "server:dev": "npm run dev --prefix Server"
+  }
+}

@@ -2,7 +2,7 @@
  * Client/src/screens/LoginScreen.js
  * 
  * Premium, dark-themed Login Screen.
- * Provides credentials inputs, editable server IP configuration for robust network connection,
+ * Provides credentials inputs, auto-discovering server IP configuration for robust network connection,
  * and a tap-to-autofill quick panel featuring Alice, Bob, Charlie, David, Emily, Jack.
  */
 
@@ -20,7 +20,15 @@ import {
   ScrollView,
 } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
-import { getServerHost, setServerHost, detectServerHost } from '../config';
+import {
+  getServerHost,
+  setServerHost,
+  initServerHost,
+  detectServerHost,
+  getMetroHost,
+  autoDiscoverServerHost,
+  PC_LAN_IP,
+} from '../config';
 
 const MOCK_USERS = [
   { name: 'Alice', username: 'alice', password: '123' },
@@ -37,10 +45,16 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [serverHost, setServerHostState] = useState(getServerHost());
   const [showServerSettings, setShowServerSettings] = useState(false);
+  const [isAutoDetecting, setIsAutoDetecting] = useState(false);
+  const [autoDetectMsg, setAutoDetectMsg] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
-    setServerHostState(getServerHost());
+    const initHost = async () => {
+      const active = await initServerHost();
+      setServerHostState(active);
+    };
+    initHost();
   }, []);
 
   const handleLogin = async () => {
@@ -56,13 +70,35 @@ export default function LoginScreen() {
     const result = await login(username, password);
     if (!result.success) {
       setError(result.error || 'Authentication failed. Check server IP / network.');
+      // Keep UI state synced with active server host if auto-discovered/recovered
+      setServerHostState(getServerHost());
+    }
+  };
+
+  const handleAutoDetect = async () => {
+    setIsAutoDetecting(true);
+    setAutoDetectMsg('Scanning network for server.js...');
+    try {
+      const discovered = await autoDiscoverServerHost();
+      setServerHostState(discovered);
+      setAutoDetectMsg(`✓ Connected to ${discovered}`);
+    } catch (e) {
+      setAutoDetectMsg('Scan complete.');
+    } finally {
+      setIsAutoDetecting(false);
     }
   };
 
   const handleResetHost = async () => {
-    const autoHost = detectServerHost();
-    setServerHostState(autoHost);
     await setServerHost('');
+    setServerHostState(detectServerHost());
+    setAutoDetectMsg('');
+  };
+
+  const handleSelectPreset = async (preset) => {
+    setServerHostState(preset);
+    await setServerHost(preset);
+    setAutoDetectMsg('');
   };
 
   const handleQuickFill = (user) => {
@@ -70,6 +106,8 @@ export default function LoginScreen() {
     setPassword(user.password);
     setError('');
   };
+
+  const metroIp = getMetroHost();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -121,18 +159,63 @@ export default function LoginScreen() {
 
             {showServerSettings && (
               <View style={styles.serverSettingsBox}>
-                <Text style={styles.serverLabel}>Server Host / IP Address</Text>
+                <View style={styles.serverHeaderRow}>
+                  <Text style={styles.serverLabel}>Server Host / IP Address</Text>
+                  <TouchableOpacity style={styles.autoDetectBtn} onPress={handleAutoDetect} disabled={isAutoDetecting}>
+                    {isAutoDetecting ? (
+                      <ActivityIndicator size="small" color="#38BDF8" />
+                    ) : (
+                      <Text style={styles.autoDetectBtnText}>⚡ Auto-Detect IP</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+
+                {autoDetectMsg ? (
+                  <Text style={styles.autoDetectStatusText}>{autoDetectMsg}</Text>
+                ) : null}
+
                 <TextInput
                   style={styles.serverInput}
-                  placeholder="e.g. 192.168.1.72 or localhost"
+                  placeholder="e.g. 192.168.1.72 or 10.0.2.2 or localhost"
                   placeholderTextColor="#64748B"
                   value={serverHost}
                   onChangeText={setServerHostState}
                   autoCapitalize="none"
                   autoCorrect={false}
                 />
+                
+                <Text style={styles.presetLabel}>Quick Presets:</Text>
+                <View style={styles.presetRow}>
+                  <TouchableOpacity
+                    style={[styles.presetChip, serverHost === PC_LAN_IP && styles.presetChipActive]}
+                    onPress={() => handleSelectPreset(PC_LAN_IP)}
+                  >
+                    <Text style={styles.presetChipText}>{PC_LAN_IP} (Physical Phone)</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.presetChip, serverHost === '10.0.2.2' && styles.presetChipActive]}
+                    onPress={() => handleSelectPreset('10.0.2.2')}
+                  >
+                    <Text style={styles.presetChipText}>10.0.2.2 (Emulator)</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.presetChip, serverHost === 'localhost' && styles.presetChipActive]}
+                    onPress={() => handleSelectPreset('localhost')}
+                  >
+                    <Text style={styles.presetChipText}>localhost (ADB / iOS)</Text>
+                  </TouchableOpacity>
+                  {metroIp && metroIp !== PC_LAN_IP && metroIp !== '10.0.2.2' && metroIp !== 'localhost' ? (
+                    <TouchableOpacity
+                      style={[styles.presetChip, serverHost === metroIp && styles.presetChipActive]}
+                      onPress={() => handleSelectPreset(metroIp)}
+                    >
+                      <Text style={styles.presetChipText}>Metro ({metroIp})</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+
                 <TouchableOpacity style={styles.resetButton} onPress={handleResetHost}>
-                  <Text style={styles.resetButtonText}>Auto-Detect IP ({detectServerHost()})</Text>
+                  <Text style={styles.resetButtonText}>Reset Default ({detectServerHost()})</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -258,12 +341,36 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 20,
   },
+  serverHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
   serverLabel: {
     color: '#94A3B8',
     fontSize: 11,
     fontWeight: '700',
     textTransform: 'uppercase',
+  },
+  autoDetectBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: '#1E293B',
+    borderColor: '#38BDF8',
+    borderWidth: 1,
+  },
+  autoDetectBtnText: {
+    color: '#38BDF8',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  autoDetectStatusText: {
+    color: '#10B981', // Emerald 500
+    fontSize: 11,
     marginBottom: 6,
+    fontWeight: '600',
   },
   serverInput: {
     backgroundColor: '#1E293B',
@@ -275,6 +382,35 @@ const styles = StyleSheet.create({
     color: '#38BDF8',
     fontSize: 14,
     marginBottom: 8,
+  },
+  presetLabel: {
+    color: '#64748B',
+    fontSize: 11,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  presetRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 10,
+  },
+  presetChip: {
+    backgroundColor: '#1E293B',
+    borderColor: '#334155',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  presetChipActive: {
+    backgroundColor: '#0EA5E9',
+    borderColor: '#0EA5E9',
+  },
+  presetChipText: {
+    color: '#94A3B8',
+    fontSize: 11,
+    fontWeight: '600',
   },
   resetButton: {
     alignSelf: 'flex-start',

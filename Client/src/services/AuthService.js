@@ -7,8 +7,7 @@
  */
 
 import axios from 'axios';
-import { Platform } from 'react-native';
-import { getApiUrl, getServerHost, setServerHost, autoDiscoverServerHost } from '../config';
+import { getApiUrl, getServerHost, autoDiscoverServerHost } from '../config';
 import StorageService from './StorageService';
 import Logger from './Logger';
 
@@ -24,6 +23,12 @@ class AuthService {
    */
   async login(username, password, isRetry = false) {
     const formattedUsername = username.trim().toLowerCase();
+    // Do not let a stale manually selected emulator address (10.0.2.2) block
+    // a phone. Probe the current Android routes before the first login call.
+    if (!isRetry) {
+      await autoDiscoverServerHost();
+    }
+
     const apiUrl = getApiUrl();
     const currentHost = getServerHost();
     
@@ -90,11 +95,15 @@ class AuthService {
 
       let errMsg = error.response?.data?.message || error.message;
       if (isNetworkError) {
+        const loopbackNote = currentHost === '127.0.0.1' || currentHost === 'localhost'
+          ? `\n\n${currentHost} is the phone's own loopback address unless USB ADB reverse is active. Run:\nadb reverse tcp:3000 tcp:3000`
+          : '';
         errMsg = `Unable to connect to server at ${currentHost}:3000.\n\n` +
                  `Quick Troubleshooting:\n` +
                  `1. Ensure server is running: npm run server\n` +
-                 `2. Android Emulator: Use IP 10.0.2.2\n` +
-                 `3. Physical Phone: Run 'adb reverse tcp:3000 tcp:3000' or enter PC's Wi-Fi IP`;
+                 `2. Start Metro with: npm start\n` +
+                 `3. Phone and computer must be on the same Wi-Fi; allow TCP port 3000 through the firewall.` +
+                 loopbackNote;
       }
 
       Logger.log({

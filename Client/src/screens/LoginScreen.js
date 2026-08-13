@@ -27,7 +27,6 @@ import {
   detectServerHost,
   getMetroHost,
   autoDiscoverServerHost,
-  PC_LAN_IP,
 } from '../config';
 
 const MOCK_USERS = [
@@ -80,8 +79,12 @@ export default function LoginScreen() {
     setAutoDetectMsg('Scanning network for server.js...');
     try {
       const discovered = await autoDiscoverServerHost();
-      setServerHostState(discovered);
-      setAutoDetectMsg(`✓ Connected to ${discovered}`);
+      if (discovered) {
+        setServerHostState(discovered);
+        setAutoDetectMsg(`✓ Connected to ${discovered}`);
+      } else {
+        setAutoDetectMsg('No reachable server found. Start the backend and check Wi-Fi/firewall.');
+      }
     } catch (e) {
       setAutoDetectMsg('Scan complete.');
     } finally {
@@ -176,7 +179,7 @@ export default function LoginScreen() {
 
                 <TextInput
                   style={styles.serverInput}
-                  placeholder="e.g. 192.168.1.72 or 10.0.2.2 or localhost"
+                  placeholder="Auto-detected; manual IP only if required"
                   placeholderTextColor="#64748B"
                   value={serverHost}
                   onChangeText={setServerHostState}
@@ -187,10 +190,10 @@ export default function LoginScreen() {
                 <Text style={styles.presetLabel}>Quick Presets:</Text>
                 <View style={styles.presetRow}>
                   <TouchableOpacity
-                    style={[styles.presetChip, serverHost === PC_LAN_IP && styles.presetChipActive]}
-                    onPress={() => handleSelectPreset(PC_LAN_IP)}
+                    style={[styles.presetChip, serverHost === '127.0.0.1' && styles.presetChipActive]}
+                    onPress={() => handleSelectPreset('127.0.0.1')}
                   >
-                    <Text style={styles.presetChipText}>{PC_LAN_IP} (Physical Phone)</Text>
+                    <Text style={styles.presetChipText}>ADB tunnel (USB only)</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.presetChip, serverHost === '10.0.2.2' && styles.presetChipActive]}
@@ -198,13 +201,7 @@ export default function LoginScreen() {
                   >
                     <Text style={styles.presetChipText}>10.0.2.2 (Emulator)</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.presetChip, serverHost === 'localhost' && styles.presetChipActive]}
-                    onPress={() => handleSelectPreset('localhost')}
-                  >
-                    <Text style={styles.presetChipText}>localhost (ADB / iOS)</Text>
-                  </TouchableOpacity>
-                  {metroIp && metroIp !== PC_LAN_IP && metroIp !== '10.0.2.2' && metroIp !== 'localhost' ? (
+                  {metroIp && metroIp !== '10.0.2.2' && metroIp !== 'localhost' ? (
                     <TouchableOpacity
                       style={[styles.presetChip, serverHost === metroIp && styles.presetChipActive]}
                       onPress={() => handleSelectPreset(metroIp)}

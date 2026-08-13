@@ -22,14 +22,23 @@ import { useAuth } from '../hooks/useAuth';
 import { useCall } from '../hooks/useCall';
 import { useUsers } from '../hooks/useUsers';
 import { useSocket } from '../hooks/useSocket';
+import useAssistant from '../hooks/useAssistant';
 import Icon from 'react-native-vector-icons/Ionicons';
 
-export default function HomeScreen({ navigation }) {
+export default function HomeScreen({ navigation, route }) {
   const { user, logout } = useAuth();
   const { isSocketConnected } = useSocket();
   const { makeCall } = useCall();
   const { users, isLoading, error, refetch } = useUsers();
+  const { triggerWakeWord, isHandsFreeEnabled } = useAssistant();
   const [search, setSearch] = useState('');
+
+  // Synchronize route.params.searchQuery from Voice Assistant intent
+  React.useEffect(() => {
+    if (route?.params?.searchQuery) {
+      setSearch(route.params.searchQuery);
+    }
+  }, [route?.params?.searchQuery]);
 
 
 
@@ -73,7 +82,7 @@ export default function HomeScreen({ navigation }) {
     const isMe = item.username.toLowerCase() === user?.username?.toLowerCase();
     const isOffline = item.status === 'OFFLINE';
     const isInCall = item.status === 'IN CALL';
-    
+
     // Call is disabled if it's the current user, or target is offline/in-call
     const canCall = !isMe && !isOffline && !isInCall && isSocketConnected;
 
@@ -134,6 +143,7 @@ export default function HomeScreen({ navigation }) {
           </View>
         </View>
         <View style={styles.headerRight}>
+
           <TouchableOpacity
             style={styles.debugBtn}
             onPress={() => navigation.navigate('Debug')}
@@ -246,7 +256,27 @@ const styles = StyleSheet.create({
   },
   headerRight: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
+  },
+  aiAssistantBtn: {
+    backgroundColor: '#0F172A',
+    borderColor: '#00F2FE',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  aiAssistantBtnText: {
+    color: '#00F2FE',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  aiStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginLeft: 2,
   },
   debugBtn: {
     backgroundColor: '#334155',

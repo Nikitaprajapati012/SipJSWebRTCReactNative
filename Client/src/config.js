@@ -1,197 +1,185 @@
 /**
- * Client/src/config.js
+ * Network configuration for the REST API, Socket.IO, and WebRTC services.
  *
- * Central configuration for signaling, authentication, and WebRTC endpoints.
- * Supports smart auto-discovery across physical devices, emulators, Wi-Fi, ADB reverse, and iOS.
+ * `generatedServerHosts.js` is refreshed every time the client is started.
+ * It contains the development computer's current LAN addresses, so changing
+ * Wi-Fi networks does not require editing this file or rebuilding the app.
  */
 
 import { Platform, NativeModules } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { SERVER_HOSTS } from './generatedServerHosts';
 
 const SERVER_HOST_KEY = '@app_server_host_override';
+const ANDROID_EMULATOR_HOST = '10.0.2.2';
+const ANDROID_ADB_REVERSE_HOST = '127.0.0.1';
 
-// PC Local Network LAN IP (Default for Physical Phone Wi-Fi / USB debugging)
-export const PC_LAN_IP = '192.168.1.72';
+const isLoopbackHost = host => host === 'localhost' || host === '127.0.0.1';
 
-/**
- * Helper to sanitize host string.
- */
 export const sanitizeHost = host => {
   if (!host) return '';
-  return host.trim();
+
+  // Accept a plain host/IP or a pasted http://host:port URL. The API port is
+  // controlled by this app, so remove the pasted protocol, path, and port.
+  return host
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/\/.*$/, '')
+    .replace(/:\d+$/, '');
 };
 
 /**
- * Extract host IP from React Native Metro bundler URL if available.
- * e.g., 'http://192.168.1.72:8081/index.bundle...' -> '192.168.1.72'
+ * Return Metro's host only when it is a LAN address. A localhost Metro URL is
+ * local to the Android target and cannot be used to reach the PC's API.
  */
 export const getMetroHost = () => {
   try {
     const scriptURL = NativeModules.SourceCode?.scriptURL;
-    if (scriptURL) {
-      const match = scriptURL.match(/^https?:\/\/([^:/]+)(:\d+)?/);
-      if (match && match[1]) {
-        return match[1].trim();
-      }
-    }
+    const match = scriptURL?.match(/^https?:\/\/([^:/]+)(?::\d+)?/);
+    const host = match?.[1] ? sanitizeHost(match[1]) : '';
+    return host && !isLoopbackHost(host) ? host : null;
   } catch (error) {
-    // Ignore error
+    return null;
   }
-  return null;
+};
+
+const uniqueHosts = hosts => [...new Set(hosts.map(sanitizeHost).filter(Boolean))];
+
+/**
+ * On Android, every target receives an individual `adb reverse` rule during
+ * `npm start`/`npm run android`. Therefore 127.0.0.1 is the first route for
+ * both a USB phone and an emulator. It is a tunnel to the development PC, not
+ * the phone's own server. LAN and 10.0.2.2 remain no-tunnel fallbacks.
+ */
+const getRuntimeCandidates = async () => {
+  let savedHost = '';
+  try {
+    savedHost = sanitizeHost(await AsyncStorage.getItem(SERVER_HOST_KEY));
+  } catch (error) {}
+
+  // A saved loopback address from an old app version is not a valid LAN
+  // preference. Loopback is added below only as an explicit ADB-reverse path.
+  if (Platform.OS === 'android' && isLoopbackHost(savedHost)) savedHost = '';
+
+  const metroHost = getMetroHost();
+  const generatedHosts = Array.isArray(SERVER_HOSTS) ? SERVER_HOSTS : [];
+  const platformFallback = Platform.OS === 'android'
+    ? [ANDROID_ADB_REVERSE_HOST, ANDROID_EMULATOR_HOST]
+    : ['localhost'];
+
+  return uniqueHosts([
+    ...(Platform.OS === 'android' ? [ANDROID_ADB_REVERSE_HOST] : []),
+    metroHost,
+    ...generatedHosts,
+    savedHost,
+    ...platformFallback,
+  ]);
 };
 
 /**
- * Default fallback server host IP based on platform.
+ * Initial display value. Android starts with its per-device ADB tunnel; it
+ * falls back to the generated current LAN IP if no tunnel is available.
  */
 export const detectServerHost = () => {
   const metroHost = getMetroHost();
-  if (metroHost && metroHost !== 'localhost' && metroHost !== '127.0.0.1') {
-    return metroHost;
-  }
-  return PC_LAN_IP;
+  const generatedHosts = Array.isArray(SERVER_HOSTS) ? SERVER_HOSTS : [];
+  const lanHost = uniqueHosts([metroHost, ...generatedHosts])[0];
+  if (Platform.OS === 'android') return lanHost || ANDROID_ADB_REVERSE_HOST;
+  return lanHost || 'localhost';
 };
 
-// In-memory active server host
-let activeHost = PC_LAN_IP;
+let activeHost = detectServerHost();
 
-/**
- * Test if a given host IP can reach the server.js health endpoint.
- * @param {string} host - Host IP to test
- * @param {number} timeoutMs - Timeout in milliseconds
- * @returns {Promise<boolean>}
- */
-export const checkHostHealth = async (host, timeoutMs = 1200) => {
-  if (!host) return false;
-  const clean = sanitizeHost(host);
-  if (!clean) return false;
+export const checkHostHealth = async (host, timeoutMs = 2500) => {
+  const cleanHost = sanitizeHost(host);
+  if (!cleanHost) return false;
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-    const response = await fetch(`http://${clean}:3000/api/health`, {
+    const response = await fetch(`http://${cleanHost}:3000/api/health`, {
       method: 'GET',
       headers: { Accept: 'application/json' },
       signal: controller.signal,
     });
+    if (!response.ok) return false;
+    const data = await response.json();
+    return data?.success === true;
+  } catch (error) {
+    return false;
+  } finally {
     clearTimeout(timer);
-
-    if (response.ok) {
-      const data = await response.json();
-      return data && data.success === true;
-    }
-  } catch (err) {
-    // Host unreachable or timed out
   }
-  return false;
 };
 
 /**
- * Smart Auto-Discovery: Probes host candidates to find a working server IP.
- * Candidate Priority:
- * 1. PC LAN IP ('192.168.1.72' - Works 100% on Physical Devices over Wi-Fi & USB)
- * 2. Metro Bundler IP
- * 3. Saved custom host from AsyncStorage
- * 4. 'localhost' (ADB reverse on Android physical phone/emulator & iOS simulator)
- * 5. Android Emulator loopback ('10.0.2.2')
- *
- * @returns {Promise<string>} The first reachable host IP
+ * Check every current candidate concurrently. This handles both emulator and
+ * phone without waiting for unreachable virtual-network adapters to time out.
+ * Returns null when nothing is reachable; it never silently retains a stale IP.
  */
 export const autoDiscoverServerHost = async () => {
-  const candidates = [PC_LAN_IP];
+  const candidates = await getRuntimeCandidates();
+  if (!candidates.length) return null;
 
-  // Metro Bundler IP
-  const metro = getMetroHost();
-  if (metro && !candidates.includes(metro)) {
-    candidates.push(metro);
-  }
-
-  // Saved custom host from AsyncStorage
-  try {
-    const saved = await AsyncStorage.getItem(SERVER_HOST_KEY);
-    if (saved && saved.trim() && !candidates.includes(saved.trim())) {
-      candidates.push(saved.trim());
+  const findReachable = hosts => new Promise(resolve => {
+    if (!hosts.length) {
+      resolve(null);
+      return;
     }
-  } catch (e) {}
 
-  // Localhost & ADB Reverse
-  if (!candidates.includes('localhost')) candidates.push('localhost');
-  if (!candidates.includes('127.0.0.1')) candidates.push('127.0.0.1');
+    let pending = hosts.length;
 
-  // Android Emulator loopback IP
-  if (Platform.OS === 'android' && !candidates.includes('10.0.2.2')) {
-    candidates.push('10.0.2.2');
-  }
+    hosts.forEach(host => {
+      checkHostHealth(host).then(isHealthy => {
+        if (isHealthy) {
+          resolve(host);
+          return;
+        }
 
-  // Probe candidates sequentially with fast 1.2s timeout
-  for (const host of candidates) {
-    const isWorking = await checkHostHealth(host, 1200);
-    if (isWorking) {
-      activeHost = host;
-      try {
-        await AsyncStorage.setItem(SERVER_HOST_KEY, host);
-      } catch (e) {}
-      return host;
-    }
-  }
+        pending -= 1;
+        if (pending === 0) resolve(null);
+      });
+    });
+  });
 
-  // Fallback to activeHost or default if none responded
-  return activeHost || detectServerHost();
+  // Prefer a real PC LAN address for a physical phone. Loopback and
+  // 10.0.2.2 are transport-specific fallbacks and are checked only after LAN
+  // candidates fail, so Auto-Detect displays a useful Wi-Fi IP when possible.
+  const tunnelHosts = candidates.filter(host => isLoopbackHost(host) || host === ANDROID_EMULATOR_HOST);
+  const lanHosts = candidates.filter(host => !tunnelHosts.includes(host));
+  const discovered = await findReachable(lanHosts) || await findReachable(tunnelHosts);
+
+  if (discovered) activeHost = discovered;
+  return discovered;
 };
 
-/**
- * Initialize host setting from AsyncStorage on app launch.
- */
 export const initServerHost = async () => {
-  try {
-    const saved = await AsyncStorage.getItem(SERVER_HOST_KEY);
-    if (saved && saved.trim()) {
-      activeHost = saved.trim();
-    } else {
-      activeHost = await autoDiscoverServerHost();
-    }
-  } catch (e) {
-    activeHost = detectServerHost();
-  }
+  const discovered = await autoDiscoverServerHost();
+  activeHost = discovered || detectServerHost();
   return activeHost;
 };
 
-/**
- * Persist user-entered custom server host IP.
- */
 export const setServerHost = async newHost => {
-  try {
-    const cleanHost = sanitizeHost(newHost);
-    if (cleanHost) {
-      await AsyncStorage.setItem(SERVER_HOST_KEY, cleanHost);
-      activeHost = cleanHost;
-    } else {
-      await AsyncStorage.removeItem(SERVER_HOST_KEY);
-      activeHost = detectServerHost();
-    }
-  } catch (e) {
+  const cleanHost = sanitizeHost(newHost);
+  if (cleanHost) {
+    activeHost = cleanHost;
+    await AsyncStorage.setItem(SERVER_HOST_KEY, cleanHost);
+  } else {
+    await AsyncStorage.removeItem(SERVER_HOST_KEY);
     activeHost = detectServerHost();
   }
   return activeHost;
 };
 
-/**
- * Get active server host IP.
- */
 export const getServerHost = () => activeHost || detectServerHost();
-
-/**
- * Dynamic URL getters
- */
 export const getApiUrl = () => `http://${getServerHost()}:3000/api`;
 export const getSocketUrl = () => `http://${getServerHost()}:3000`;
 
-// Static exports for backward compatibility
+// Static exports are retained for compatibility. New requests use the dynamic getters.
 export const API_URL = getApiUrl();
 export const SOCKET_URL = getSocketUrl();
 export const SIP_DOMAIN = 'mock.sip.server';
 
-// STUN/ICE Config
 export const RTC_CONFIG = {
   iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
 };

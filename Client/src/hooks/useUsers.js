@@ -11,7 +11,7 @@ import { SocketContext } from '../context/SocketContext';
 import UserService from '../services/UserService';
 
 export const useUsers = () => {
-  const { user, isAuthenticated } = useContext(AuthContext);
+  const { user, isAuthenticated, logout } = useContext(AuthContext);
   const { isSocketConnected } = useContext(SocketContext);
   
   const [users, setUsers] = useState([]);
@@ -27,11 +27,17 @@ export const useUsers = () => {
       const data = await UserService.fetchUsers(user.token);
       setUsers(data);
     } catch (err) {
-      setError(err.message || 'Failed to fetch users');
+      const msg = err.message || '';
+      if (msg.toLowerCase().includes('token') || msg.toLowerCase().includes('forbidden')) {
+        // Clear expired/invalid session so user can log in cleanly
+        logout();
+      } else {
+        setError(msg || 'Failed to fetch users');
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, user, logout]);
 
   useEffect(() => {
     if (isAuthenticated && user) {

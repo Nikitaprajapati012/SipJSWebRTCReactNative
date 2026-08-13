@@ -11,6 +11,7 @@ class AudioRoutePackage : ReactPackage {
         val modules = ArrayList<NativeModule>()
         modules.add(AudioRouteModule(reactContext))
         modules.add(PipModule(reactContext))
+        modules.add(SpeechRecognitionModule(reactContext))
         return modules
     }
 

@@ -12,6 +12,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { AuthProvider } from './src/context/AuthContext';
 import { SocketProvider } from './src/context/SocketContext';
 import { CallProvider } from './src/context/CallContext';
+import { AssistantProvider } from './src/context/AssistantContext';
 
 import LoginScreen from './src/screens/LoginScreen';
 import HomeScreen from './src/screens/HomeScreen';
@@ -21,11 +22,42 @@ import ActiveCallScreen from './src/screens/ActiveCallScreen';
 import DebugScreen from './src/screens/DebugScreen';
 
 import FloatingCallOverlay from './src/components/FloatingCallOverlay';
+import AssistantOverlay from './src/components/AssistantOverlay';
 
 import { useAuth } from './src/hooks/useAuth';
 import { navigationRef } from './src/services/NavigationService';
 
 const Stack = createNativeStackNavigator();
+
+/**
+ * The assistant is an enhancement to the calling app, not a prerequisite for
+ * rendering it.  Keep an error in that optional layer from preventing the
+ * authentication and call navigation UI from mounting.
+ */
+class AssistantStartupBoundary extends React.Component {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error) {
+    console.warn('Assistant disabled after startup error:', error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <>
+          <AppNavigator />
+          <FloatingCallOverlay />
+        </>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 /**
  * AppNavigator dynamically switches stacks based on user authentication.
@@ -71,8 +103,13 @@ export default function App() {
     <AuthProvider>
       <SocketProvider>
         <CallProvider>
-          <AppNavigator />
-          <FloatingCallOverlay />
+          <AssistantStartupBoundary>
+            <AssistantProvider>
+              <AppNavigator />
+              <FloatingCallOverlay />
+              <AssistantOverlay />
+            </AssistantProvider>
+          </AssistantStartupBoundary>
         </CallProvider>
       </SocketProvider>
     </AuthProvider>

@@ -75,8 +75,8 @@ The application supports both system-level PiP (Android) and in-app overlay PiP 
 
 ## 📝 Troubleshooting & FAQ
 
-### Q: Why is there a "Network Error" when logging in on a physical device?
-A: Android physical devices do not automatically share the host's localhost port. Always run `adb reverse tcp:3000 tcp:3000` to bind your computer's mock signaling server port to the physical device. (This is now automated in the client's `npm start` and `npm run android` scripts).
+### Q: Why is there a "Network Error" when logging in on Android?
+A: Start the backend first, then run `npm start`. The start script creates an ADB tunnel for *each* connected Android target, so both an emulator and a USB-connected physical phone automatically use `127.0.0.1:3000` without a hardcoded Wi-Fi IP. This is a tunnel to the development PC, not the phone's own server. It also detects the computer's current LAN IP as a fallback for a Wi-Fi-connected phone; keep the phone and computer on the same Wi-Fi and allow TCP port 3000 through the firewall. For a VPN or multi-network machine, start Metro with `SERVER_HOST=<your-LAN-IP> npm start`.
 
 ### Q: Camera fails to start, displaying a black frame. What is wrong?
 A: Ensure that you have granted Camera and Microphone permissions to the application. Check that your device camera is not occupied by another app.
